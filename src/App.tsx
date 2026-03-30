@@ -65,6 +65,7 @@ interface Dish {
   storeId: string;
   name: string;
   price: number;
+  category?: string;
 }
 
 interface Plan {
@@ -259,7 +260,8 @@ function AppContent() {
   // Admin State
   const [adminTab, setAdminTab] = useState<'plans' | 'stores' | 'dishes' | 'orders' | 'announcement'>('plans');
   const [newStore, setNewStore] = useState({ name: '', description: '' });
-  const [newDish, setNewDish] = useState({ storeId: '', name: '', price: '' });
+  const [newDish, setNewDish] = useState({ storeId: '', name: '', price: '', category: '' });
+  const [bulkDishInput, setBulkDishInput] = useState('');
   const [newPlan, setNewPlan] = useState({ name: '', storeId: '', diningDate: '', closingTime: '' });
   const [announcementEdit, setAnnouncementEdit] = useState({ content: '', isActive: false });
 
@@ -405,9 +407,55 @@ function AppContent() {
         ...newDish, 
         price
       });
-      setNewDish({ storeId: '', name: '', price: '' });
+      setNewDish({ ...newDish, name: '', price: '' }); // Keep storeId and category
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, 'dishes');
+    }
+  };
+
+  const addBulkDishes = async () => {
+    if (!newDish.storeId || !bulkDishInput.trim()) return;
+    
+    const lines = bulkDishInput.split('\n').filter(l => l.trim());
+    const errors: string[] = [];
+    
+    for (const line of lines) {
+      // Expected format: "Dish Name, Price, Category(optional)"
+      const parts = line.split(',').map(p => p.trim());
+      if (parts.length < 2) {
+        errors.push(`Invalid format: ${line}`);
+        continue;
+      }
+      
+      const name = parts[0];
+      const price = parseFloat(parts[1]);
+      const category = parts[2] || newDish.category || '';
+      
+      if (!name || isNaN(price) || price < 0) {
+        errors.push(`Invalid data: ${line}`);
+        continue;
+      }
+      
+      const dishRef = doc(collection(db, 'dishes'));
+      const id = dishRef.id;
+      try {
+        await setDoc(dishRef, {
+          id,
+          storeId: newDish.storeId,
+          name,
+          price,
+          category
+        });
+      } catch (e) {
+        console.error(`Failed to add ${name}`, e);
+        errors.push(`Failed to add ${name}`);
+      }
+    }
+    
+    if (errors.length > 0) {
+      alert(`Finished with some errors:\n${errors.join('\n')}`);
+    } else {
+      setBulkDishInput('');
     }
   };
 
@@ -637,22 +685,34 @@ function AppContent() {
                               <span className="w-6 h-6 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500">2</span>
                               選擇菜色
                             </div>
-                            <div className="grid grid-cols-1 gap-3">
-                              {dishes.filter(d => d.storeId === selectedPlan.storeId).map(dish => (
-                                <div 
-                                  key={dish.id}
-                                  onClick={() => setSelectedDish(dish)}
-                                  className={cn(
-                                    "p-4 rounded-xl border-2 cursor-pointer transition-all flex justify-between items-center",
-                                    selectedDish?.id === dish.id 
-                                      ? "border-orange-500 bg-orange-50/30" 
-                                      : "border-zinc-100 hover:border-zinc-200"
-                                  )}
-                                >
-                                  <div className="font-bold">{dish.name}</div>
-                                  <div className="text-orange-600 font-bold">${dish.price}</div>
-                                </div>
-                              ))}
+                            <div className="space-y-8">
+                              {(() => {
+                                const storeDishes = dishes.filter(d => d.storeId === selectedPlan.storeId);
+                                const categories = Array.from(new Set(storeDishes.map(d => d.category || '其它')));
+                                
+                                return categories.map(cat => (
+                                  <div key={cat} className="space-y-3">
+                                    <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider pl-1">{cat}</h4>
+                                    <div className="grid grid-cols-1 gap-3">
+                                      {storeDishes.filter(d => (d.category || '其它') === cat).map(dish => (
+                                        <div 
+                                          key={dish.id}
+                                          onClick={() => setSelectedDish(dish)}
+                                          className={cn(
+                                            "p-4 rounded-xl border-2 cursor-pointer transition-all flex justify-between items-center",
+                                            selectedDish?.id === dish.id 
+                                              ? "border-orange-500 bg-orange-50/30" 
+                                              : "border-zinc-100 hover:border-zinc-200"
+                                          )}
+                                        >
+                                          <div className="font-bold">{dish.name}</div>
+                                          <div className="text-orange-600 font-bold">${dish.price}</div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ));
+                              })()}
                             </div>
                           </div>
 
@@ -943,46 +1003,83 @@ function AppContent() {
 
               {adminTab === 'dishes' && (
                 <div className="space-y-8">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-zinc-50 p-4 rounded-xl">
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-sm font-medium text-zinc-600">所屬店家</label>
-                      <select 
-                        value={newDish.storeId} 
-                        onChange={e => setNewDish({...newDish, storeId: e.target.value})}
-                        className="px-4 py-2 rounded-lg border border-zinc-200 bg-white"
-                      >
-                        <option value="">選擇店家</option>
-                        {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                      </select>
+                  <div className="bg-zinc-50 p-6 rounded-xl space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-sm font-medium text-zinc-600">所屬店家</label>
+                        <select 
+                          value={newDish.storeId} 
+                          onChange={e => setNewDish({...newDish, storeId: e.target.value})}
+                          className="px-4 py-2 rounded-lg border border-zinc-200 bg-white"
+                        >
+                          <option value="">選擇店家</option>
+                          {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </div>
+                      <Input label="菜色名稱" value={newDish.name} onChange={v => setNewDish({...newDish, name: v})} placeholder="例如：招牌排骨飯" />
+                      <Input label="價格" type="number" value={newDish.price} onChange={v => setNewDish({...newDish, price: v})} placeholder="100" />
+                      <Input label="分類 (選填)" value={newDish.category || ''} onChange={v => setNewDish({...newDish, category: v})} placeholder="例如：主食、小菜" />
                     </div>
-                    <Input label="菜色名稱" value={newDish.name} onChange={v => setNewDish({...newDish, name: v})} placeholder="例如：招牌排骨飯" />
-                    <Input label="價格" type="number" value={newDish.price} onChange={v => setNewDish({...newDish, price: v})} placeholder="100" />
-                    <Button onClick={addDish}><Plus className="w-4 h-4 inline mr-2" /> 新增菜色</Button>
+                    <div className="flex justify-end">
+                      <Button onClick={addDish}><Plus className="w-4 h-4 inline mr-2" /> 新增單筆菜色</Button>
+                    </div>
+
+                    <div className="pt-6 border-t border-zinc-200 space-y-4">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-sm font-medium text-zinc-600">批次新增菜色 (格式: 名稱, 價格, 分類)</label>
+                        <textarea 
+                          value={bulkDishInput}
+                          onChange={e => setBulkDishInput(e.target.value)}
+                          placeholder="排骨飯, 100, 主食&#10;雞腿飯, 110, 主食&#10;燙青菜, 40, 小菜"
+                          className="w-full px-4 py-3 rounded-lg border border-zinc-200 bg-white min-h-[120px] font-mono text-sm"
+                        />
+                        <p className="text-[10px] text-zinc-400">每行一筆，逗號分隔。分類可省略（將使用上方填寫的分類）。</p>
+                      </div>
+                      <div className="flex justify-end">
+                        <Button onClick={addBulkDishes} variant="outline"><Plus className="w-4 h-4 inline mr-2" /> 批次新增</Button>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                      <thead>
-                        <tr className="border-b border-zinc-100 text-zinc-400 text-xs uppercase tracking-wider">
-                          <th className="py-3 px-4 font-bold">店家</th>
-                          <th className="py-3 px-4 font-bold">菜色</th>
-                          <th className="py-3 px-4 font-bold">價格</th>
-                          <th className="py-3 px-4 font-bold">操作</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-50">
-                        {dishes.map(dish => (
-                          <tr key={dish.id} className="hover:bg-zinc-50/50 transition-colors">
-                            <td className="py-4 px-4 text-zinc-600">{stores.find(s => s.id === dish.storeId)?.name}</td>
-                            <td className="py-4 px-4 font-bold">{dish.name}</td>
-                            <td className="py-4 px-4 text-orange-600 font-bold">${dish.price}</td>
-                            <td className="py-4 px-4">
-                              <button onClick={() => setConfirmDelete({ col: 'dishes', id: dish.id })} className="text-zinc-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="space-y-10">
+                    {stores.map(store => {
+                      const storeDishes = dishes.filter(d => d.storeId === store.id);
+                      if (storeDishes.length === 0) return null;
+                      
+                      // Group by category
+                      const categories = Array.from(new Set(storeDishes.map(d => d.category || '未分類')));
+
+                      return (
+                        <div key={store.id} className="space-y-4">
+                          <div className="flex items-center gap-3 pb-2 border-b border-zinc-100">
+                            <Store className="w-5 h-5 text-orange-600" />
+                            <h3 className="text-lg font-bold">{store.name}</h3>
+                            <span className="text-xs text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full">{storeDishes.length} 筆菜色</span>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 gap-6">
+                            {categories.map(cat => (
+                              <div key={cat} className="space-y-2 pl-4 border-l-2 border-zinc-100">
+                                <h4 className="text-sm font-bold text-zinc-400 uppercase tracking-wider">{cat}</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                  {storeDishes.filter(d => (d.category || '未分類') === cat).map(dish => (
+                                    <div key={dish.id} className="p-3 rounded-xl border border-zinc-100 flex justify-between items-center bg-white hover:border-zinc-200 transition-all shadow-sm">
+                                      <div>
+                                        <div className="font-bold text-sm">{dish.name}</div>
+                                        <div className="text-orange-600 font-bold text-xs">${dish.price}</div>
+                                      </div>
+                                      <button onClick={() => setConfirmDelete({ col: 'dishes', id: dish.id })} className="text-zinc-300 hover:text-red-500 transition-colors">
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

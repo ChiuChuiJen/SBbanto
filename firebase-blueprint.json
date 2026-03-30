@@ -19,7 +19,8 @@
         "id": { "type": "string", "description": "Unique ID for the dish" },
         "storeId": { "type": "string", "description": "ID of the store this dish belongs to" },
         "name": { "type": "string", "description": "Name of the dish" },
-        "price": { "type": "number", "description": "Price of the dish" }
+        "price": { "type": "number", "description": "Price of the dish" },
+        "category": { "type": "string", "description": "Category of the dish (e.g., Grilled, Fried)" }
       },
       "required": ["id", "storeId", "name", "price"]
     },

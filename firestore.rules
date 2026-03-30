@@ -36,7 +36,8 @@ service cloud.firestore {
       return data.keys().hasAll(['id', 'storeId', 'name', 'price']) &&
              isValidString(data.storeId, 1, 50) &&
              isValidString(data.name, 1, 100) &&
-             data.price is number && data.price >= 0;
+             data.price is number && data.price >= 0 &&
+             (!('category' in data) || isValidString(data.category, 0, 50));
     }
 
     function isValidPlan(data) {
