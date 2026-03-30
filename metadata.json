@@ -1,0 +1,5 @@
+{
+  "name": "同事團購訂便當平台",
+  "description": "使用 Google Sheets 作為後端的同事團購訂便當平台，包含前台訂購與後台管理功能。",
+  "requestFramePermissions": []
+}

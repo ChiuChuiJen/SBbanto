@@ -1,0 +1,108 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        (
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+          request.auth.token.email.lower() == "chiuchuijen@gmail.com"
+        );
+    }
+
+    function isValidString(val, min, max) {
+      return val is string && val.size() >= min && val.size() <= max;
+    }
+
+    // ===============================================================
+    // Data Validation
+    // ===============================================================
+    
+    function isValidStore(data) {
+      return data.keys().hasAll(['id', 'name']) &&
+             isValidString(data.name, 1, 100) &&
+             (!('description' in data) || isValidString(data.description, 0, 500));
+    }
+
+    function isValidDish(data) {
+      return data.keys().hasAll(['id', 'storeId', 'name', 'price']) &&
+             isValidString(data.storeId, 1, 50) &&
+             isValidString(data.name, 1, 100) &&
+             data.price is number && data.price >= 0;
+    }
+
+    function isValidPlan(data) {
+      return data.keys().hasAll(['id', 'name', 'storeId', 'diningDate', 'closingTime']) &&
+             isValidString(data.name, 1, 100) &&
+             isValidString(data.storeId, 1, 50) &&
+             isValidString(data.diningDate, 10, 10) &&
+             isValidString(data.closingTime, 1, 50);
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['id', 'planId', 'dishId', 'userName', 'quantity', 'timestamp', 'uid']) &&
+             isValidString(data.planId, 1, 50) &&
+             isValidString(data.dishId, 1, 50) &&
+             isValidString(data.userName, 1, 50) &&
+             isValidString(data.uid, 0, 50) &&
+             data.quantity is number && data.quantity > 0 &&
+             isValidString(data.timestamp, 1, 50) &&
+             (!('isPaid' in data) || data.isPaid is bool);
+    }
+
+    function isValidAnnouncement(data) {
+      return data.keys().hasAll(['id', 'content', 'isActive']) &&
+             isValidString(data.id, 1, 50) &&
+             isValidString(data.content, 1, 5000) &&
+             data.isActive is bool &&
+             (!('updatedAt' in data) || isValidString(data.updatedAt, 1, 50));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /announcements/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /stores/{storeId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidStore(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /dishes/{dishId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidDish(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /plans/{planId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidPlan(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /orders/{orderId} {
+      allow read: if true;
+      allow create: if isValidOrder(request.resource.data) || isAdmin();
+      allow update: if (isValidOrder(request.resource.data) && (request.resource.data.userName == resource.data.userName || (resource.data.uid != null && request.auth != null && resource.data.uid == request.auth.uid))) || isAdmin();
+      allow delete: if isAdmin() || (resource.data.uid == "" && request.auth == null) || (resource.data.uid != null && request.auth != null && resource.data.uid == request.auth.uid);
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow write: if isAdmin();
+    }
+  }
+}

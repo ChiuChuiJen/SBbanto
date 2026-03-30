@@ -1,0 +1,75 @@
+{
+  "entities": {
+    "Store": {
+      "title": "Store",
+      "description": "A restaurant or store that provides dishes.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID for the store" },
+        "name": { "type": "string", "description": "Name of the store" },
+        "description": { "type": "string", "description": "Description of the store" }
+      },
+      "required": ["id", "name"]
+    },
+    "Dish": {
+      "title": "Dish",
+      "description": "A dish offered by a store.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID for the dish" },
+        "storeId": { "type": "string", "description": "ID of the store this dish belongs to" },
+        "name": { "type": "string", "description": "Name of the dish" },
+        "price": { "type": "number", "description": "Price of the dish" }
+      },
+      "required": ["id", "storeId", "name", "price"]
+    },
+    "Plan": {
+      "title": "Plan",
+      "description": "A group order plan.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID for the plan" },
+        "name": { "type": "string", "description": "Name of the plan" },
+        "storeId": { "type": "string", "description": "ID of the store for this plan" },
+        "diningDate": { "type": "string", "description": "Date of dining (YYYY-MM-DD)" },
+        "closingTime": { "type": "string", "description": "Closing time for orders (ISO 8601)" }
+      },
+      "required": ["id", "name", "storeId", "diningDate", "closingTime"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "An individual order from a user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID for the order" },
+        "planId": { "type": "string", "description": "ID of the plan this order belongs to" },
+        "dishId": { "type": "string", "description": "ID of the dish ordered" },
+        "userName": { "type": "string", "description": "Name or ID of the user who ordered" },
+        "uid": { "type": "string", "description": "Firebase Auth UID of the user who ordered" },
+        "quantity": { "type": "number", "description": "Quantity of the dish ordered" },
+        "isPaid": { "type": "boolean", "description": "Whether the order has been paid" },
+        "timestamp": { "type": "string", "description": "Time the order was placed (ISO 8601)" }
+      },
+      "required": ["id", "planId", "dishId", "userName", "uid", "quantity", "timestamp"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "A global announcement shown to users.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID (usually 'global')" },
+        "content": { "type": "string", "description": "The content of the announcement" },
+        "isActive": { "type": "boolean", "description": "Whether the announcement is active" },
+        "updatedAt": { "type": "string", "description": "Last update time (ISO 8601)" }
+      },
+      "required": ["id", "content", "isActive"]
+    }
+  },
+  "firestore": {
+    "/stores/{storeId}": { "schema": "Store", "description": "Collection of stores" },
+    "/dishes/{dishId}": { "schema": "Dish", "description": "Collection of dishes" },
+    "/plans/{planId}": { "schema": "Plan", "description": "Collection of group order plans" },
+    "/orders/{orderId}": { "schema": "Order", "description": "Collection of user orders" },
+    "/announcements/{id}": { "schema": "Announcement", "description": "Global announcements" }
+  }
+}
