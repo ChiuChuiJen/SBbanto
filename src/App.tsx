@@ -16,7 +16,10 @@ import {
   Trash2,
   Edit2,
   LogIn,
-  LogOut
+  LogOut,
+  Sun,
+  Moon,
+  Globe
 } from 'lucide-react';
 import { format, isAfter, parseISO } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
@@ -161,8 +164,8 @@ const Input = ({
   </div>
 );
 
-const Card = ({ children, className, key }: { children: React.ReactNode; className?: string; key?: string | number }) => (
-  <div key={key} className={cn("bg-white rounded-xl border border-zinc-100 shadow-sm overflow-hidden", className)}>
+const Card = ({ children, className, ...props }: { children: React.ReactNode; className?: string; [key: string]: any }) => (
+  <div {...props} className={cn("bg-white rounded-xl border border-zinc-100 shadow-sm overflow-hidden", className)}>
     {children}
   </div>
 );
@@ -238,6 +241,170 @@ class ErrorBoundary extends Component<any, any> {
 
 function AppContent() {
   const [view, setView] = useState<'user' | 'admin'>('user');
+  const [language, setLanguage] = useState<'zh' | 'en' | 'vi'>('zh');
+  const [darkMode, setDarkMode] = useState(false);
+
+  // Translations
+  const translations = {
+    zh: {
+      title: "假日就是要吃便當",
+      adminBackend: "管理後台",
+      backToFront: "回到前台",
+      login: "登入",
+      logout: "登出",
+      loading: "載入中...",
+      plans: "團購方案",
+      orders: "訂單明細",
+      activePlans: "進行中的團購",
+      selectPlan: "選擇一個方案開始訂購",
+      noActivePlans: "目前沒有進行中的團購",
+      backToList: "返回列表",
+      step1: "輸入姓名或代號",
+      step2: "選擇菜色",
+      step3: "數量",
+      confirmOrder: "確認訂購",
+      confirmEdit: "確認修改",
+      orderSuccess: "訂購成功！",
+      editSuccess: "修改成功！",
+      myOrder: "我的",
+      paid: "已付款",
+      unpaid: "未付款",
+      noOrders: "目前尚無人訂購",
+      adminTitle: "管理後台",
+      adminDesc: "管理店家、菜色與團購方案",
+      tabPlans: "方案",
+      tabStores: "店家",
+      tabDishes: "菜色",
+      tabOrders: "訂單",
+      tabAnnounce: "公告",
+      addPlan: "新增方案",
+      addStore: "新增店家",
+      addDish: "新增單筆菜色",
+      updateDish: "更新菜色",
+      batchAdd: "批次新增",
+      edit: "修改",
+      delete: "刪除",
+      category: "分類",
+      price: "價格",
+      dishName: "菜色名稱",
+      store: "店家",
+      diningDate: "用餐日期",
+      closingTime: "截止時間",
+      planName: "方案名稱",
+      storeName: "店家名稱",
+      storeDesc: "店家描述",
+      announcement: "公告內容",
+      save: "儲存",
+      cancel: "取消",
+    },
+    en: {
+      title: "Holiday Bento",
+      adminBackend: "Admin",
+      backToFront: "Client",
+      login: "Login",
+      logout: "Logout",
+      loading: "Loading...",
+      plans: "Plans",
+      orders: "Orders",
+      activePlans: "Active Group Buys",
+      selectPlan: "Select a plan to start ordering",
+      noActivePlans: "No active group buys at the moment",
+      backToList: "Back to List",
+      step1: "Enter Name or ID",
+      step2: "Choose Dish",
+      step3: "Quantity",
+      confirmOrder: "Confirm Order",
+      confirmEdit: "Confirm Edit",
+      orderSuccess: "Order Successful!",
+      editSuccess: "Edit Successful!",
+      myOrder: "Mine",
+      paid: "Paid",
+      unpaid: "Unpaid",
+      noOrders: "No orders yet",
+      adminTitle: "Admin Dashboard",
+      adminDesc: "Manage stores, dishes, and plans",
+      tabPlans: "Plans",
+      tabStores: "Stores",
+      tabDishes: "Dishes",
+      tabOrders: "Orders",
+      tabAnnounce: "Announce",
+      addPlan: "Add Plan",
+      addStore: "Add Store",
+      addDish: "Add Dish",
+      updateDish: "Update Dish",
+      batchAdd: "Batch Add",
+      edit: "Edit",
+      delete: "Delete",
+      category: "Category",
+      price: "Price",
+      dishName: "Dish Name",
+      store: "Store",
+      diningDate: "Dining Date",
+      closingTime: "Closing Time",
+      planName: "Plan Name",
+      storeName: "Store Name",
+      storeDesc: "Store Description",
+      announcement: "Announcement",
+      save: "Save",
+      cancel: "Cancel",
+    },
+    vi: {
+      title: "Cơm Hộp Ngày Lễ",
+      adminBackend: "Quản trị",
+      backToFront: "Trang chủ",
+      login: "Đăng nhập",
+      logout: "Đăng xuất",
+      loading: "Đang tải...",
+      plans: "Kế hoạch",
+      orders: "Đơn hàng",
+      activePlans: "Đang diễn ra",
+      selectPlan: "Chọn một kế hoạch để bắt đầu đặt hàng",
+      noActivePlans: "Hiện không có kế hoạch nào",
+      backToList: "Quay lại danh sách",
+      step1: "Nhập tên hoặc ID",
+      step2: "Chọn món",
+      step3: "Số lượng",
+      confirmOrder: "Xác nhận đặt hàng",
+      confirmEdit: "Xác nhận sửa",
+      orderSuccess: "Đặt hàng thành công!",
+      editSuccess: "Sửa thành công!",
+      myOrder: "Của tôi",
+      paid: "Đã thanh toán",
+      unpaid: "Chưa thanh toán",
+      noOrders: "Chưa có đơn hàng nào",
+      adminTitle: "Bảng điều khiển quản trị",
+      adminDesc: "Quản lý cửa hàng, món ăn và kế hoạch",
+      tabPlans: "Kế hoạch",
+      tabStores: "Cửa hàng",
+      tabDishes: "Món ăn",
+      tabOrders: "Đơn hàng",
+      tabAnnounce: "Thông báo",
+      addPlan: "Thêm kế hoạch",
+      addStore: "Thêm cửa hàng",
+      addDish: "Thêm món",
+      updateDish: "Cập nhật món",
+      batchAdd: "Thêm hàng loạt",
+      edit: "Sửa",
+      delete: "Xóa",
+      category: "Phân loại",
+      price: "Giá",
+      dishName: "Tên món",
+      store: "Cửa hàng",
+      diningDate: "Ngày ăn",
+      closingTime: "Thời gian đóng",
+      planName: "Tên kế hoạch",
+      storeName: "Tên cửa hàng",
+      storeDesc: "Mô tả cửa hàng",
+      announcement: "Thông báo",
+      save: "Lưu",
+      cancel: "Hủy",
+    }
+  };
+
+  const t = (key: keyof typeof translations['zh']) => {
+    return translations[language][key] || translations['zh'][key];
+  };
+
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
   const [dishes, setDishes] = useState<Dish[]>([]);
@@ -261,6 +428,7 @@ function AppContent() {
   const [adminTab, setAdminTab] = useState<'plans' | 'stores' | 'dishes' | 'orders' | 'announcement'>('plans');
   const [newStore, setNewStore] = useState({ name: '', description: '' });
   const [newDish, setNewDish] = useState({ storeId: '', name: '', price: '', category: '' });
+  const [editingDishId, setEditingDishId] = useState<string | null>(null);
   const [bulkDishInput, setBulkDishInput] = useState('');
   const [newPlan, setNewPlan] = useState({ name: '', storeId: '', diningDate: '', closingTime: '' });
   const [announcementEdit, setAnnouncementEdit] = useState({ content: '', isActive: false });
@@ -399,18 +567,39 @@ function AppContent() {
   const addDish = async () => {
     const price = parseFloat(newDish.price);
     if (!newDish.name || !newDish.storeId || isNaN(price) || price < 0) return;
-    const dishRef = doc(collection(db, 'dishes'));
-    const id = dishRef.id;
+    
     try {
-      await setDoc(dishRef, { 
-        id, 
-        ...newDish, 
-        price
-      });
+      if (editingDishId) {
+        await setDoc(doc(db, 'dishes', editingDishId), { 
+          ...newDish, 
+          id: editingDishId,
+          price 
+        });
+        setEditingDishId(null);
+      } else {
+        const dishRef = doc(collection(db, 'dishes'));
+        const id = dishRef.id;
+        await setDoc(dishRef, { 
+          id, 
+          ...newDish, 
+          price
+        });
+      }
       setNewDish({ ...newDish, name: '', price: '' }); // Keep storeId and category
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, 'dishes');
     }
+  };
+
+  const startEditDish = (dish: Dish) => {
+    setNewDish({
+      storeId: dish.storeId,
+      name: dish.name,
+      price: dish.price.toString(),
+      category: dish.category || ''
+    });
+    setEditingDishId(dish.id);
+    // Scroll to top of dish form if needed, or just let user find it
   };
 
   const addBulkDishes = async () => {
@@ -505,44 +694,64 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900 font-sans">
+    <div className={cn("min-h-screen transition-colors duration-300", darkMode ? "bg-zinc-900 text-zinc-100 dark" : "bg-zinc-50 text-zinc-900")}>
       {/* Header */}
-      <header className="bg-white border-b border-zinc-200 sticky top-0 z-10">
+      <header className={cn("border-b sticky top-0 z-10 transition-colors duration-300", darkMode ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200")}>
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('user')}>
             <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center">
               <ShoppingBag className="w-5 h-5 text-white" />
             </div>
-            <span className="font-bold text-lg tracking-tight">同事團購</span>
+            <span className="font-bold text-lg tracking-tight">{t('title')}</span>
           </div>
           
           <div className="flex items-center gap-4">
+            {/* Theme & Language Switchers */}
+            <div className="flex items-center gap-2 mr-2">
+              <button 
+                onClick={() => setDarkMode(!darkMode)}
+                className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                title={darkMode ? "Light Mode" : "Dark Mode"}
+              >
+                {darkMode ? <Sun className="w-4 h-4 text-orange-400" /> : <Moon className="w-4 h-4 text-zinc-500" />}
+              </button>
+              <select 
+                value={language} 
+                onChange={(e) => setLanguage(e.target.value as any)}
+                className="bg-transparent text-xs font-bold border-none focus:ring-0 cursor-pointer"
+              >
+                <option value="zh">繁中</option>
+                <option value="en">EN</option>
+                <option value="vi">VN</option>
+              </select>
+            </div>
+
             {user ? (
               <>
                 {isAdmin && (
                   <button 
                     onClick={() => setView(view === 'user' ? 'admin' : 'user')}
-                    className="flex items-center gap-2 text-sm font-medium text-zinc-600 hover:text-orange-600 transition-colors"
+                    className="flex items-center gap-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-orange-600 transition-colors"
                   >
                     {view === 'user' ? (
-                      <><Settings className="w-4 h-4" /> 管理後台</>
+                      <><Settings className="w-4 h-4" /> {t('adminBackend')}</>
                     ) : (
-                      <><ArrowLeft className="w-4 h-4" /> 回到前台</>
+                      <><ArrowLeft className="w-4 h-4" /> {t('backToFront')}</>
                     )}
                   </button>
                 )}
-                <div className="flex items-center gap-3 pl-4 border-l border-zinc-200">
+                <div className="flex items-center gap-3 pl-4 border-l border-zinc-200 dark:border-zinc-800">
                   <div className="text-right hidden sm:block">
-                    <div className="text-xs font-bold text-zinc-900">{user.displayName}</div>
+                    <div className="text-xs font-bold">{user.displayName}</div>
                     <div className="text-[10px] text-zinc-400">{user.email}</div>
                   </div>
-                  <img src={user.photoURL || ''} className="w-8 h-8 rounded-full border border-zinc-100" alt="" />
-                  <button onClick={handleLogout} className="text-zinc-400 hover:text-zinc-900 transition-colors"><LogOut className="w-4 h-4" /></button>
+                  <img src={user.photoURL || ''} className="w-8 h-8 rounded-full border border-zinc-100 dark:border-zinc-800" alt="" />
+                  <button onClick={handleLogout} className="text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"><LogOut className="w-4 h-4" /></button>
                 </div>
               </>
             ) : (
               <Button onClick={handleLogin} variant="outline" className="text-sm">
-                <LogIn className="w-4 h-4" /> 登入
+                <LogIn className="w-4 h-4" /> {t('login')}
               </Button>
             )}
           </div>
@@ -551,29 +760,29 @@ function AppContent() {
 
       <main className="max-w-5xl mx-auto p-6">
         {loading ? (
-          <div className="py-20 text-center text-zinc-400">載入中...</div>
+          <div className="py-20 text-center text-zinc-400">{t('loading')}</div>
         ) : view === 'user' ? (
           <div className="space-y-8">
             {/* User View Tabs */}
             {!selectedPlan && (
-              <div className="flex gap-1 bg-zinc-100 p-1 rounded-xl w-fit">
+              <div className="flex gap-1 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl w-fit">
                 <button
                   onClick={() => setUserTab('plans')}
                   className={cn(
                     "px-6 py-2 rounded-lg text-sm font-bold transition-all",
-                    userTab === 'plans' ? "bg-white text-orange-600 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
+                    userTab === 'plans' ? "bg-white dark:bg-zinc-700 text-orange-600 shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
                   )}
                 >
-                  團購方案
+                  {t('plans')}
                 </button>
                 <button
                   onClick={() => setUserTab('all-orders')}
                   className={cn(
                     "px-6 py-2 rounded-lg text-sm font-bold transition-all",
-                    userTab === 'all-orders' ? "bg-white text-orange-600 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
+                    userTab === 'all-orders' ? "bg-white dark:bg-zinc-700 text-orange-600 shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
                   )}
                 >
-                  訂單明細
+                  {t('orders')}
                 </button>
               </div>
             )}
@@ -583,8 +792,8 @@ function AppContent() {
               !selectedPlan ? (
                 <div className="space-y-6">
                   <div className="flex flex-col gap-1">
-                    <h2 className="text-2xl font-bold">進行中的團購</h2>
-                    <p className="text-zinc-500">選擇一個方案開始訂購</p>
+                    <h2 className="text-2xl font-bold">{t('activePlans')}</h2>
+                    <p className="text-zinc-500">{t('selectPlan')}</p>
                   </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1020,8 +1229,18 @@ function AppContent() {
                       <Input label="價格" type="number" value={newDish.price} onChange={v => setNewDish({...newDish, price: v})} placeholder="100" />
                       <Input label="分類 (選填)" value={newDish.category || ''} onChange={v => setNewDish({...newDish, category: v})} placeholder="例如：主食、小菜" />
                     </div>
-                    <div className="flex justify-end">
-                      <Button onClick={addDish}><Plus className="w-4 h-4 inline mr-2" /> 新增單筆菜色</Button>
+                    <div className="flex justify-end gap-2">
+                      {editingDishId && (
+                        <Button variant="outline" onClick={() => {
+                          setEditingDishId(null);
+                          setNewDish({ name: '', price: '', storeId: newDish.storeId, category: newDish.category });
+                        }}>
+                          {t('cancel')}
+                        </Button>
+                      )}
+                      <Button onClick={addDish}>
+                        {editingDishId ? <><Edit2 className="w-4 h-4 inline mr-2" /> {t('updateDish')}</> : <><Plus className="w-4 h-4 inline mr-2" /> {t('addDish')}</>}
+                      </Button>
                     </div>
 
                     <div className="pt-6 border-t border-zinc-200 space-y-4">
@@ -1063,14 +1282,27 @@ function AppContent() {
                                 <h4 className="text-sm font-bold text-zinc-400 uppercase tracking-wider">{cat}</h4>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                   {storeDishes.filter(d => (d.category || '未分類') === cat).map(dish => (
-                                    <div key={dish.id} className="p-3 rounded-xl border border-zinc-100 flex justify-between items-center bg-white hover:border-zinc-200 transition-all shadow-sm">
+                                    <div key={dish.id} className="p-3 rounded-xl border border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-white dark:bg-zinc-800 hover:border-zinc-200 transition-all shadow-sm">
                                       <div>
                                         <div className="font-bold text-sm">{dish.name}</div>
                                         <div className="text-orange-600 font-bold text-xs">${dish.price}</div>
                                       </div>
-                                      <button onClick={() => setConfirmDelete({ col: 'dishes', id: dish.id })} className="text-zinc-300 hover:text-red-500 transition-colors">
-                                        <Trash2 className="w-4 h-4" />
-                                      </button>
+                                      <div className="flex items-center gap-1">
+                                        <button 
+                                          onClick={() => startEditDish(dish)}
+                                          className="p-2 text-zinc-300 hover:text-orange-600 transition-colors"
+                                          title={t('edit')}
+                                        >
+                                          <Edit2 className="w-4 h-4" />
+                                        </button>
+                                        <button 
+                                          onClick={() => setConfirmDelete({ col: 'dishes', id: dish.id })} 
+                                          className="p-2 text-zinc-300 hover:text-red-500 transition-colors"
+                                          title={t('delete')}
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </div>
                                     </div>
                                   ))}
                                 </div>
@@ -1085,62 +1317,103 @@ function AppContent() {
               )}
 
               {adminTab === 'orders' && (
-                <div className="space-y-6">
+                <div className="space-y-10">
                   <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-lg">所有訂單紀錄</h3>
-                    <div className="text-sm text-zinc-500">共 {orders.length} 筆訂單</div>
+                    <h3 className="font-bold text-xl">訂單管理</h3>
+                    <div className="text-sm text-zinc-500 bg-zinc-100 px-3 py-1 rounded-full">共 {orders.length} 筆訂單</div>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                      <thead>
-                        <tr className="border-b border-zinc-100 text-zinc-400 text-xs uppercase tracking-wider">
-                          <th className="py-3 px-4 font-bold">方案</th>
-                          <th className="py-3 px-4 font-bold">姓名</th>
-                          <th className="py-3 px-4 font-bold">菜色</th>
-                          <th className="py-3 px-4 font-bold">數量</th>
-                          <th className="py-3 px-4 font-bold text-center">付款狀態</th>
-                          <th className="py-3 px-4 font-bold">總金額</th>
-                          <th className="py-3 px-4 font-bold">訂購時間</th>
-                          <th className="py-3 px-4 font-bold">操作</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-50">
-                        {orders.map(order => {
-                          const plan = plans.find(p => p.id === order.planId);
-                          const dish = dishes.find(d => d.id === order.dishId);
-                          return (
-                            <tr key={order.id} className="hover:bg-zinc-50/50 transition-colors">
-                              <td className="py-4 px-4 text-zinc-600">{plan?.name}</td>
-                              <td className="py-4 px-4 font-bold">{order.userName}</td>
-                              <td className="py-4 px-4 text-zinc-600">{dish?.name}</td>
-                              <td className="py-4 px-4 text-zinc-600">{order.quantity || 0}</td>
-                              <td className="py-4 px-4 text-center">
-                                <button 
-                                  onClick={() => togglePaymentStatus(order)}
-                                  className={cn(
-                                    "px-3 py-1 rounded-full text-[10px] font-bold transition-all",
-                                    order.isPaid 
-                                      ? "bg-green-100 text-green-700 hover:bg-green-200" 
-                                      : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
-                                  )}
-                                >
-                                  {order.isPaid ? '已付款' : '未付款'}
-                                </button>
-                              </td>
-                              <td className="py-4 px-4 text-orange-600 font-bold">${(dish?.price || 0) * (order.quantity || 0)}</td>
-                              <td className="py-4 px-4 text-zinc-400 text-xs">{format(parseISO(order.timestamp), 'MM/dd HH:mm')}</td>
-                              <td className="py-4 px-4">
-                                <div className="flex items-center gap-2">
-                                  <button onClick={() => startEditOrder(order)} className="text-zinc-400 hover:text-orange-600"><Edit2 className="w-4 h-4" /></button>
-                                  <button onClick={() => setConfirmDelete({ col: 'orders', id: order.id })} className="text-zinc-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+
+                  {plans.map(plan => {
+                    const planOrders = orders.filter(o => o.planId === plan.id);
+                    if (planOrders.length === 0) return null;
+
+                    // Calculate dish summary for this plan
+                    const dishSummary: { [dishId: string]: { name: string, count: number } } = {};
+                    planOrders.forEach(order => {
+                      if (!dishSummary[order.dishId]) {
+                        const dish = dishes.find(d => d.id === order.dishId);
+                        dishSummary[order.dishId] = { name: dish?.name || '未知菜色', count: 0 };
+                      }
+                      dishSummary[order.dishId].count += order.quantity;
+                    });
+
+                    return (
+                      <div key={plan.id} className="space-y-6 border-l-4 border-orange-500 pl-6 py-2">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                          <div className="space-y-1">
+                            <h4 className="text-xl font-bold text-zinc-900">{plan.name}</h4>
+                            <div className="flex items-center gap-4 text-sm text-zinc-500">
+                              <span className="flex items-center gap-1"><Calendar className="w-4 h-4" /> {plan.diningDate}</span>
+                              <span className="flex items-center gap-1"><Store className="w-4 h-4" /> {stores.find(s => s.id === plan.storeId)?.name}</span>
+                            </div>
+                          </div>
+                          
+                          {/* Dish Summary Cards */}
+                          <div className="flex flex-wrap gap-2">
+                            {Object.values(dishSummary).map((item, idx) => (
+                              <div key={idx} className="bg-orange-50 text-orange-700 px-3 py-1.5 rounded-lg text-sm font-bold border border-orange-100 flex items-center gap-2">
+                                <span>{item.name}</span>
+                                <span className="bg-orange-600 text-white px-1.5 py-0.5 rounded text-[10px] min-w-[20px] text-center">{item.count}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="overflow-x-auto bg-white rounded-xl border border-zinc-100 shadow-sm">
+                          <table className="w-full text-left">
+                            <thead>
+                              <tr className="border-b border-zinc-100 text-zinc-400 text-[10px] uppercase tracking-wider">
+                                <th className="py-3 px-4 font-bold">姓名</th>
+                                <th className="py-3 px-4 font-bold">菜色</th>
+                                <th className="py-3 px-4 font-bold">數量</th>
+                                <th className="py-3 px-4 font-bold text-center">付款狀態</th>
+                                <th className="py-3 px-4 font-bold">總金額</th>
+                                <th className="py-3 px-4 font-bold">訂購時間</th>
+                                <th className="py-3 px-4 font-bold">操作</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-50">
+                              {planOrders.map(order => {
+                                const dish = dishes.find(d => d.id === order.dishId);
+                                return (
+                                  <tr key={order.id} className="hover:bg-zinc-50/50 transition-colors">
+                                    <td className="py-4 px-4 font-bold">{order.userName}</td>
+                                    <td className="py-4 px-4 text-zinc-600">{dish?.name}</td>
+                                    <td className="py-4 px-4 text-zinc-600">{order.quantity || 0}</td>
+                                    <td className="py-4 px-4 text-center">
+                                      <button 
+                                        onClick={() => togglePaymentStatus(order)}
+                                        className={cn(
+                                          "px-3 py-1 rounded-full text-[10px] font-bold transition-all",
+                                          order.isPaid 
+                                            ? "bg-green-100 text-green-700 hover:bg-green-200" 
+                                            : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+                                        )}
+                                      >
+                                        {order.isPaid ? '已付款' : '未付款'}
+                                      </button>
+                                    </td>
+                                    <td className="py-4 px-4 text-orange-600 font-bold">${(dish?.price || 0) * (order.quantity || 0)}</td>
+                                    <td className="py-4 px-4 text-zinc-400 text-xs">{format(parseISO(order.timestamp), 'MM/dd HH:mm')}</td>
+                                    <td className="py-4 px-4">
+                                      <div className="flex items-center gap-2">
+                                        <button onClick={() => startEditOrder(order)} className="text-zinc-400 hover:text-orange-600"><Edit2 className="w-4 h-4" /></button>
+                                        <button onClick={() => setConfirmDelete({ col: 'orders', id: order.id })} className="text-zinc-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {orders.length === 0 && (
+                    <div className="py-20 text-center text-zinc-400">目前沒有任何訂單紀錄</div>
+                  )}
                 </div>
               )}
 
