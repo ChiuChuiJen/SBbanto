@@ -2,6 +2,7 @@ import React, { useState, useEffect, Component } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Plus, 
+  Minus,
   Store, 
   Utensils, 
   Calendar, 
@@ -17,9 +18,8 @@ import {
   Edit2,
   LogIn,
   LogOut,
-  Sun,
-  Moon,
-  Globe
+  Globe,
+  X
 } from 'lucide-react';
 import { format, isAfter, parseISO } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
@@ -103,7 +103,7 @@ const Button = ({
   children, 
   onClick, 
   variant = 'primary', 
-  className,
+  className, 
   disabled,
   type = 'button'
 }: { 
@@ -115,10 +115,10 @@ const Button = ({
   type?: 'button' | 'submit';
 }) => {
   const variants = {
-    primary: 'bg-orange-600 text-white hover:bg-orange-700',
-    secondary: 'bg-zinc-800 text-white hover:bg-zinc-900',
-    outline: 'border border-zinc-300 text-zinc-700 hover:bg-zinc-50',
-    danger: 'bg-red-500 text-white hover:bg-red-600'
+    primary: 'bg-orange-600 text-white hover:bg-orange-700 shadow-md shadow-orange-500/20',
+    secondary: 'bg-zinc-900 text-white hover:bg-black -zinc-100 -zinc-900 -white shadow-md shadow-zinc-900/10',
+    outline: 'border border-zinc-200 text-zinc-700 hover:bg-zinc-50 -zinc-800 -zinc-300 -zinc-800/50',
+    danger: 'bg-red-500 text-white hover:bg-red-600 shadow-md shadow-red-500/20'
   };
 
   return (
@@ -127,7 +127,7 @@ const Button = ({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'px-4 py-2 rounded-lg font-medium transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2',
+        'px-5 py-2.5 rounded-xl font-semibold transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2 text-sm',
         variants[variant],
         className
       )}
@@ -153,19 +153,19 @@ const Input = ({
   className?: string;
 }) => (
   <div className={cn("flex flex-col gap-1.5", className)}>
-    {label && <label className="text-sm font-medium text-zinc-600">{label}</label>}
+    {label && <label className="text-sm font-semibold text-zinc-600 -zinc-400 ml-1">{label}</label>}
     <input
       type={type}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="px-4 py-2 rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all"
+      className="px-4 py-2.5 rounded-xl border border-zinc-200 bg-white -zinc-900 -zinc-800 -white focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all placeholder:text-zinc-400"
     />
   </div>
 );
 
 const Card = ({ children, className, ...props }: { children: React.ReactNode; className?: string; [key: string]: any }) => (
-  <div {...props} className={cn("bg-white rounded-xl border border-zinc-100 shadow-sm overflow-hidden", className)}>
+  <div {...props} className={cn("bg-white -zinc-900/50 rounded-2xl border border-zinc-100 -zinc-800 shadow-sm overflow-hidden transition-all", className)}>
     {children}
   </div>
 );
@@ -242,7 +242,6 @@ class ErrorBoundary extends Component<any, any> {
 function AppContent() {
   const [view, setView] = useState<'user' | 'admin'>('user');
   const [language, setLanguage] = useState<'zh' | 'en' | 'vi'>('zh');
-  const [darkMode, setDarkMode] = useState(false);
 
   // Translations
   const translations = {
@@ -270,6 +269,7 @@ function AppContent() {
       paid: "已付款",
       unpaid: "未付款",
       noOrders: "目前尚無人訂購",
+      allOrders: "全部訂單",
       adminTitle: "管理後台",
       adminDesc: "管理店家、菜色與團購方案",
       tabPlans: "方案",
@@ -321,6 +321,7 @@ function AppContent() {
       paid: "Paid",
       unpaid: "Unpaid",
       noOrders: "No orders yet",
+      allOrders: "All Orders",
       adminTitle: "Admin Dashboard",
       adminDesc: "Manage stores, dishes, and plans",
       tabPlans: "Plans",
@@ -372,6 +373,7 @@ function AppContent() {
       paid: "Đã thanh toán",
       unpaid: "Chưa thanh toán",
       noOrders: "Chưa có đơn hàng nào",
+      allOrders: "Tất cả đơn hàng",
       adminTitle: "Bảng điều khiển quản trị",
       adminDesc: "Quản lý cửa hàng, món ăn và kế hoạch",
       tabPlans: "Kế hoạch",
@@ -432,6 +434,8 @@ function AppContent() {
   const [bulkDishInput, setBulkDishInput] = useState('');
   const [newPlan, setNewPlan] = useState({ name: '', storeId: '', diningDate: '', closingTime: '' });
   const [announcementEdit, setAnnouncementEdit] = useState({ content: '', isActive: false });
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [summaryTab, setSummaryTab] = useState<string | null>(null);
 
   const isAdmin = user?.email?.toLowerCase() === 'chiuchuijen@gmail.com';
 
@@ -564,6 +568,47 @@ function AppContent() {
     }
   };
 
+  const exportStores = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(stores));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href",     dataStr);
+    downloadAnchorNode.setAttribute("download", "stores.json");
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
+
+  const importStores = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const importedStores = JSON.parse(e.target?.result as string);
+          if (Array.isArray(importedStores)) {
+            for (const store of importedStores) {
+              if (store.name) {
+                const storeRef = doc(collection(db, 'stores'));
+                await setDoc(storeRef, {
+                  id: storeRef.id,
+                  name: store.name,
+                  description: store.description || ''
+                });
+              }
+            }
+            alert('店家匯入成功！');
+          }
+        } catch (error) {
+          console.error("Error importing stores:", error);
+          alert('匯入失敗，請確認檔案格式是否正確。');
+        }
+      };
+      reader.readAsText(file);
+    }
+    // Reset input
+    event.target.value = '';
+  };
+
   const addDish = async () => {
     const price = parseFloat(newDish.price);
     if (!newDish.name || !newDish.storeId || isNaN(price) || price < 0) return;
@@ -589,6 +634,49 @@ function AppContent() {
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, 'dishes');
     }
+  };
+
+  const exportDishes = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(dishes));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href",     dataStr);
+    downloadAnchorNode.setAttribute("download", "dishes.json");
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
+
+  const importDishes = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const importedDishes = JSON.parse(e.target?.result as string);
+          if (Array.isArray(importedDishes)) {
+            for (const dish of importedDishes) {
+              if (dish.name && dish.price !== undefined && dish.storeId) {
+                const dishRef = doc(collection(db, 'dishes'));
+                await setDoc(dishRef, {
+                  id: dishRef.id,
+                  storeId: dish.storeId,
+                  name: dish.name,
+                  price: Number(dish.price),
+                  category: dish.category || ''
+                });
+              }
+            }
+            alert('菜品匯入成功！');
+          }
+        } catch (error) {
+          console.error("Error importing dishes:", error);
+          alert('匯入失敗，請確認檔案格式是否正確。');
+        }
+      };
+      reader.readAsText(file);
+    }
+    // Reset input
+    event.target.value = '';
   };
 
   const startEditDish = (dish: Dish) => {
@@ -694,27 +782,20 @@ function AppContent() {
   };
 
   return (
-    <div className={cn("min-h-screen transition-colors duration-300", darkMode ? "bg-zinc-900 text-zinc-100 dark" : "bg-zinc-50 text-zinc-900")}>
+    <div className="min-h-screen transition-colors duration-300 font-sans bg-zinc-50 text-zinc-900">
       {/* Header */}
-      <header className={cn("border-b sticky top-0 z-10 transition-colors duration-300", darkMode ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200")}>
+      <header className="border-b sticky top-0 z-10 transition-colors duration-300 backdrop-blur-md bg-white/80 border-zinc-200">
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('user')}>
-            <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center">
-              <ShoppingBag className="w-5 h-5 text-white" />
+          <div className="flex items-center gap-2 cursor-pointer group" onClick={() => setView('user')}>
+            <div className="w-10 h-10 bg-orange-600 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/30 group-hover:scale-110 transition-transform">
+              <ShoppingBag className="w-6 h-6 text-white" />
             </div>
-            <span className="font-bold text-lg tracking-tight">{t('title')}</span>
+            <span className="font-display font-black text-xl tracking-tight">{t('title')}</span>
           </div>
           
           <div className="flex items-center gap-4">
             {/* Theme & Language Switchers */}
             <div className="flex items-center gap-2 mr-2">
-              <button 
-                onClick={() => setDarkMode(!darkMode)}
-                className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                title={darkMode ? "Light Mode" : "Dark Mode"}
-              >
-                {darkMode ? <Sun className="w-4 h-4 text-orange-400" /> : <Moon className="w-4 h-4 text-zinc-500" />}
-              </button>
               <select 
                 value={language} 
                 onChange={(e) => setLanguage(e.target.value as any)}
@@ -731,7 +812,7 @@ function AppContent() {
                 {isAdmin && (
                   <button 
                     onClick={() => setView(view === 'user' ? 'admin' : 'user')}
-                    className="flex items-center gap-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-orange-600 transition-colors"
+                    className="flex items-center gap-2 text-sm font-medium text-zinc-600 -zinc-400 hover:text-orange-600 transition-colors"
                   >
                     {view === 'user' ? (
                       <><Settings className="w-4 h-4" /> {t('adminBackend')}</>
@@ -740,13 +821,13 @@ function AppContent() {
                     )}
                   </button>
                 )}
-                <div className="flex items-center gap-3 pl-4 border-l border-zinc-200 dark:border-zinc-800">
+                <div className="flex items-center gap-3 pl-4 border-l border-zinc-200 -zinc-800">
                   <div className="text-right hidden sm:block">
                     <div className="text-xs font-bold">{user.displayName}</div>
                     <div className="text-[10px] text-zinc-400">{user.email}</div>
                   </div>
-                  <img src={user.photoURL || ''} className="w-8 h-8 rounded-full border border-zinc-100 dark:border-zinc-800" alt="" />
-                  <button onClick={handleLogout} className="text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"><LogOut className="w-4 h-4" /></button>
+                  <img src={user.photoURL || ''} className="w-8 h-8 rounded-full border border-zinc-100 -zinc-800" alt="" />
+                  <button onClick={handleLogout} className="text-zinc-400 hover:text-zinc-900 -white transition-colors"><LogOut className="w-4 h-4" /></button>
                 </div>
               </>
             ) : (
@@ -765,12 +846,12 @@ function AppContent() {
           <div className="space-y-8">
             {/* User View Tabs */}
             {!selectedPlan && (
-              <div className="flex gap-1 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl w-fit">
+              <div className="flex gap-1 bg-zinc-100 -zinc-800 p-1.5 rounded-2xl w-fit border border-zinc-200 -zinc-700">
                 <button
                   onClick={() => setUserTab('plans')}
                   className={cn(
-                    "px-6 py-2 rounded-lg text-sm font-bold transition-all",
-                    userTab === 'plans' ? "bg-white dark:bg-zinc-700 text-orange-600 shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                    "px-6 py-2 rounded-xl text-sm font-bold transition-all",
+                    userTab === 'plans' ? "bg-white -zinc-700 text-orange-600 -orange-400 shadow-sm" : "text-zinc-500 hover:text-zinc-700 -zinc-300"
                   )}
                 >
                   {t('plans')}
@@ -778,11 +859,11 @@ function AppContent() {
                 <button
                   onClick={() => setUserTab('all-orders')}
                   className={cn(
-                    "px-6 py-2 rounded-lg text-sm font-bold transition-all",
-                    userTab === 'all-orders' ? "bg-white dark:bg-zinc-700 text-orange-600 shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                    "px-6 py-2 rounded-xl text-sm font-bold transition-all",
+                    userTab === 'all-orders' ? "bg-white -zinc-700 text-orange-600 -orange-400 shadow-sm" : "text-zinc-500 hover:text-zinc-700 -zinc-300"
                   )}
                 >
-                  {t('orders')}
+                  {t('allOrders')}
                 </button>
               </div>
             )}
@@ -802,36 +883,38 @@ function AppContent() {
                     return (
                       <motion.div 
                         key={plan.id}
-                        whileHover={{ y: -4 }}
+                        whileHover={{ y: -6, scale: 1.02 }}
                         onClick={() => setSelectedPlan(plan)}
                         className="cursor-pointer"
                       >
-                        <Card className="p-6 hover:border-orange-200 transition-colors group">
-                          <div className="flex justify-between items-start mb-4">
-                            <div className="space-y-1">
-                              <h3 className="font-bold text-xl group-hover:text-orange-600 transition-colors">{plan.name}</h3>
-                              <div className="flex items-center gap-2 text-sm text-zinc-500">
-                                <Store className="w-4 h-4" />
-                                <span>{store?.name || '未知店家'}</span>
+                        <Card className="p-6 hover:border-orange-200 -orange-900 transition-all group relative">
+                          <div className="flex justify-between items-start mb-6">
+                            <div className="space-y-1.5">
+                              <h3 className="font-display font-bold text-2xl group-hover:text-orange-600 -hover:text-orange-400 transition-colors">{plan.name}</h3>
+                              <div className="flex items-center gap-2 text-sm text-zinc-500 -zinc-400">
+                                <div className="w-6 h-6 rounded-full bg-zinc-100 -zinc-800 flex items-center justify-center">
+                                  <Store className="w-3.5 h-3.5" />
+                                </div>
+                                <span className="font-medium">{store?.name || '未知店家'}</span>
                               </div>
                             </div>
-                            <div className="bg-orange-50 text-orange-700 px-3 py-1 rounded-full text-xs font-bold">
+                            <div className="bg-orange-50 -orange-900/20 text-orange-700 -orange-400 px-3.5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider">
                               進行中
                             </div>
                           </div>
                           
-                          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-50">
-                            <div className="space-y-1">
-                              <div className="text-[10px] uppercase tracking-wider text-zinc-400 font-bold">用餐日期</div>
-                              <div className="flex items-center gap-1.5 text-sm font-medium">
-                                <Calendar className="w-4 h-4 text-zinc-400" />
+                          <div className="grid grid-cols-2 gap-6 pt-6 border-t border-zinc-50 -zinc-800">
+                            <div className="space-y-1.5">
+                              <div className="text-[10px] uppercase tracking-widest text-zinc-400 -zinc-500 font-black">用餐日期</div>
+                              <div className="flex items-center gap-2 text-sm font-bold">
+                                <Calendar className="w-4 h-4 text-orange-500/60" />
                                 {plan.diningDate}
                               </div>
                             </div>
-                            <div className="space-y-1">
-                              <div className="text-[10px] uppercase tracking-wider text-zinc-400 font-bold">截止時間</div>
-                              <div className="flex items-center gap-1.5 text-sm font-medium">
-                                <Clock className="w-4 h-4 text-zinc-400" />
+                            <div className="space-y-1.5">
+                              <div className="text-[10px] uppercase tracking-widest text-zinc-400 -zinc-500 font-black">截止時間</div>
+                              <div className="flex items-center gap-2 text-sm font-bold">
+                                <Clock className="w-4 h-4 text-orange-500/60" />
                                 {format(parseISO(plan.closingTime), 'MM/dd HH:mm')}
                               </div>
                             </div>
@@ -887,11 +970,11 @@ function AppContent() {
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: 20 }}
-                          className="space-y-8 pt-8 border-t border-zinc-100"
+                          className="space-y-8 pt-8 border-t border-zinc-100 -zinc-800"
                         >
                           <div className="space-y-4">
-                            <div className="flex items-center gap-2 text-sm font-bold text-zinc-400 uppercase tracking-widest">
-                              <span className="w-6 h-6 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500">2</span>
+                            <div className="flex items-center gap-2 text-sm font-black text-zinc-400 -zinc-500 uppercase tracking-widest">
+                              <span className="w-6 h-6 rounded-full bg-zinc-100 -zinc-800 flex items-center justify-center text-zinc-500">2</span>
                               選擇菜色
                             </div>
                             <div className="space-y-8">
@@ -908,14 +991,16 @@ function AppContent() {
                                           key={dish.id}
                                           onClick={() => setSelectedDish(dish)}
                                           className={cn(
-                                            "p-4 rounded-xl border-2 cursor-pointer transition-all flex justify-between items-center",
+                                            "p-4 rounded-2xl border-2 cursor-pointer transition-all flex justify-between items-center group relative overflow-hidden",
                                             selectedDish?.id === dish.id 
-                                              ? "border-orange-500 bg-orange-50/30" 
-                                              : "border-zinc-100 hover:border-zinc-200"
+                                              ? "border-orange-500 bg-orange-50/50 -orange-900/10" 
+                                              : "border-zinc-100 -zinc-800 bg-white -zinc-900/50 hover:border-orange-200 -orange-900"
                                           )}
                                         >
-                                          <div className="font-bold">{dish.name}</div>
-                                          <div className="text-orange-600 font-bold">${dish.price}</div>
+                                          <div className="font-display font-bold text-lg group-hover:text-orange-600 -hover:text-orange-400 transition-colors">{dish.name}</div>
+                                          <div className="text-orange-600 -orange-400 font-black text-xl">
+                                            <span className="text-sm font-bold mr-0.5">$</span>{dish.price}
+                                          </div>
                                         </div>
                                       ))}
                                     </div>
@@ -926,24 +1011,26 @@ function AppContent() {
                           </div>
 
                           <div className="space-y-4">
-                            <div className="flex items-center gap-2 text-sm font-bold text-zinc-400 uppercase tracking-widest">
-                              <span className="w-6 h-6 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500">3</span>
+                            <div className="flex items-center gap-2 text-sm font-black text-zinc-400 -zinc-500 uppercase tracking-widest">
+                              <span className="w-6 h-6 rounded-full bg-zinc-100 -zinc-800 flex items-center justify-center text-zinc-500">3</span>
                               數量
                             </div>
-                            <div className="flex items-center gap-4">
-                              <button 
-                                onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                                className="w-10 h-10 rounded-lg border border-zinc-200 flex items-center justify-center hover:bg-zinc-50"
-                              >
-                                -
-                              </button>
-                              <span className="text-xl font-bold w-8 text-center">{quantity}</span>
-                              <button 
-                                onClick={() => setQuantity(quantity + 1)}
-                                className="w-10 h-10 rounded-lg border border-zinc-200 flex items-center justify-center hover:bg-zinc-50"
-                              >
-                                +
-                              </button>
+                            <div className="flex items-center gap-6">
+                              <div className="flex items-center bg-zinc-100 -zinc-800 p-1 rounded-2xl border border-zinc-200 -zinc-700">
+                                <button 
+                                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                                  className="w-12 h-12 rounded-xl bg-white -zinc-700 shadow-sm flex items-center justify-center hover:bg-zinc-50 -zinc-600 transition-all active:scale-90"
+                                >
+                                  <Minus className="w-5 h-5 text-zinc-600 -zinc-300" />
+                                </button>
+                                <span className="text-2xl font-black w-16 text-center font-display">{quantity}</span>
+                                <button 
+                                  onClick={() => setQuantity(quantity + 1)}
+                                  className="w-12 h-12 rounded-xl bg-white -zinc-700 shadow-sm flex items-center justify-center hover:bg-zinc-50 -zinc-600 transition-all active:scale-90"
+                                >
+                                  <Plus className="w-5 h-5 text-zinc-600 -zinc-300" />
+                                </button>
+                              </div>
                             </div>
                           </div>
 
@@ -1115,17 +1202,17 @@ function AppContent() {
             {/* Admin View */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div className="space-y-1">
-                <h2 className="text-2xl font-bold">管理後台</h2>
-                <p className="text-zinc-500">管理店家、菜色與團購方案</p>
+                <h2 className="text-3xl font-display font-black tracking-tight">管理後台</h2>
+                <p className="text-zinc-500 font-medium">管理店家、菜色與團購方案</p>
               </div>
-              <div className="flex bg-white p-1 rounded-lg border border-zinc-200">
+              <div className="flex bg-zinc-100 -zinc-800 p-1 rounded-xl border border-zinc-200 -zinc-700">
                 {(['plans', 'stores', 'dishes', 'orders', 'announcement'] as const).map(tab => (
                   <button
                     key={tab}
                     onClick={() => setAdminTab(tab)}
                     className={cn(
-                      "px-4 py-1.5 rounded-md text-sm font-medium transition-all",
-                      adminTab === tab ? "bg-zinc-900 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-900"
+                      "px-4 py-2 rounded-lg text-sm font-semibold transition-all",
+                      adminTab === tab ? "bg-white -zinc-700 text-orange-600 -orange-400 shadow-sm" : "text-zinc-500 hover:text-zinc-900 -zinc-300"
                     )}
                   >
                     {tab === 'plans' && '方案'}
@@ -1141,14 +1228,14 @@ function AppContent() {
             <Card className="p-6">
               {adminTab === 'plans' && (
                 <div className="space-y-8">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-zinc-50 p-4 rounded-xl">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-zinc-50 -zinc-800/50 p-6 rounded-2xl border border-zinc-100 -zinc-700">
                     <Input label="方案名稱" value={newPlan.name} onChange={v => setNewPlan({...newPlan, name: v})} placeholder="例如：週三午餐團" />
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-sm font-medium text-zinc-600">綁定店家</label>
+                      <label className="text-sm font-semibold text-zinc-600 -zinc-400 ml-1">綁定店家</label>
                       <select 
                         value={newPlan.storeId} 
                         onChange={e => setNewPlan({...newPlan, storeId: e.target.value})}
-                        className="px-4 py-2 rounded-lg border border-zinc-200 bg-white"
+                        className="px-4 py-2.5 rounded-xl border border-zinc-200 bg-white -zinc-900 -zinc-800 -white focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all"
                       >
                         <option value="">選擇店家</option>
                         {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -1190,6 +1277,16 @@ function AppContent() {
 
               {adminTab === 'stores' && (
                 <div className="space-y-8">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-bold text-xl">店家管理</h3>
+                    <div className="flex gap-2">
+                      <Button onClick={exportStores} variant="outline" className="text-sm py-1.5 px-3">匯出店家</Button>
+                      <label className="cursor-pointer bg-white border border-zinc-200 text-zinc-900 hover:bg-zinc-50 px-3 py-1.5 rounded-xl text-sm font-medium transition-all shadow-sm flex items-center">
+                        匯入店家
+                        <input type="file" accept=".json" className="hidden" onChange={importStores} />
+                      </label>
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end bg-zinc-50 p-4 rounded-xl">
                     <Input label="店家名稱" value={newStore.name} onChange={v => setNewStore({...newStore, name: v})} placeholder="例如：老王便當" />
                     <Input label="店家描述" value={newStore.description} onChange={v => setNewStore({...newStore, description: v})} placeholder="例如：排骨飯很好吃" />
@@ -1212,6 +1309,16 @@ function AppContent() {
 
               {adminTab === 'dishes' && (
                 <div className="space-y-8">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-bold text-xl">菜品管理</h3>
+                    <div className="flex gap-2">
+                      <Button onClick={exportDishes} variant="outline" className="text-sm py-1.5 px-3">匯出菜品</Button>
+                      <label className="cursor-pointer bg-white border border-zinc-200 text-zinc-900 hover:bg-zinc-50 px-3 py-1.5 rounded-xl text-sm font-medium transition-all shadow-sm flex items-center">
+                        匯入菜品
+                        <input type="file" accept=".json" className="hidden" onChange={importDishes} />
+                      </label>
+                    </div>
+                  </div>
                   <div className="bg-zinc-50 p-6 rounded-xl space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                       <div className="flex flex-col gap-1.5">
@@ -1282,7 +1389,7 @@ function AppContent() {
                                 <h4 className="text-sm font-bold text-zinc-400 uppercase tracking-wider">{cat}</h4>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                   {storeDishes.filter(d => (d.category || '未分類') === cat).map(dish => (
-                                    <div key={dish.id} className="p-3 rounded-xl border border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-white dark:bg-zinc-800 hover:border-zinc-200 transition-all shadow-sm">
+                                    <div key={dish.id} className="p-3 rounded-xl border border-zinc-100 -zinc-800 flex justify-between items-center bg-white -zinc-800 hover:border-zinc-200 transition-all shadow-sm">
                                       <div>
                                         <div className="font-bold text-sm">{dish.name}</div>
                                         <div className="text-orange-600 font-bold text-xs">${dish.price}</div>
@@ -1320,7 +1427,12 @@ function AppContent() {
                 <div className="space-y-10">
                   <div className="flex justify-between items-center">
                     <h3 className="font-bold text-xl">訂單管理</h3>
-                    <div className="text-sm text-zinc-500 bg-zinc-100 px-3 py-1 rounded-full">共 {orders.length} 筆訂單</div>
+                    <div className="flex items-center gap-3">
+                      <Button onClick={() => setShowSummaryModal(true)} variant="outline" className="text-sm py-1.5 px-3">
+                        明細彙整
+                      </Button>
+                      <div className="text-sm text-zinc-500 bg-zinc-100 px-3 py-1 rounded-full">共 {orders.length} 筆訂單</div>
+                    </div>
                   </div>
 
                   {plans.map(plan => {
@@ -1474,26 +1586,33 @@ function AppContent() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8 space-y-6"
+              className="relative bg-white -zinc-900 rounded-3xl shadow-2xl max-w-lg w-full p-8 space-y-6 border border-zinc-100 -zinc-800"
+              onClick={e => e.stopPropagation()}
             >
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2 text-orange-600">
-                  <AlertCircle className="w-6 h-6" />
-                  <h3 className="text-xl font-bold">系統公告</h3>
+                  <div className="w-10 h-10 rounded-xl bg-orange-50 -orange-900/20 flex items-center justify-center">
+                    <AlertCircle className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-2xl font-display font-black tracking-tight">{t('announcement')}</h3>
                 </div>
                 <button 
                   onClick={() => setShowAnnouncement(false)}
-                  className="text-zinc-400 hover:text-zinc-600 transition-colors"
+                  className="p-2 rounded-full hover:bg-zinc-100 -zinc-800 transition-colors"
                 >
-                  <Plus className="w-6 h-6 rotate-45" />
+                  <Plus className="w-6 h-6 rotate-45 text-zinc-400" />
                 </button>
               </div>
-              <div className="text-zinc-600 leading-relaxed whitespace-pre-wrap max-h-[60vh] overflow-y-auto">
-                {announcement.content}
+              
+              <div className="bg-zinc-50 -zinc-800/50 p-6 rounded-2xl border border-zinc-100 -zinc-700">
+                <p className="text-zinc-700 -zinc-300 leading-relaxed whitespace-pre-wrap font-medium max-h-[50vh] overflow-y-auto">
+                  {announcement.content}
+                </p>
               </div>
-              <div className="pt-4 border-t border-zinc-100 flex justify-end">
-                <Button onClick={() => setShowAnnouncement(false)}>我知道了</Button>
-              </div>
+              
+              <Button onClick={() => setShowAnnouncement(false)} className="w-full py-4 text-lg">
+                我知道了
+              </Button>
             </motion.div>
           </div>
         )}
@@ -1514,30 +1633,137 @@ function AppContent() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative bg-white rounded-2xl shadow-xl max-w-sm w-full p-8 space-y-6"
+              className="relative bg-white -zinc-900 rounded-3xl shadow-2xl max-w-sm w-full p-8 space-y-6 border border-zinc-100 -zinc-800"
+              onClick={e => e.stopPropagation()}
             >
-              <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto">
-                <AlertCircle className="w-6 h-6 text-red-500" />
+              <div className="w-16 h-16 bg-red-50 -red-900/20 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+                <AlertCircle className="w-8 h-8 text-red-500" />
               </div>
               <div className="text-center space-y-2">
-                <h3 className="text-lg font-bold">確認刪除？</h3>
-                <p className="text-zinc-500 text-sm">此操作無法復原，確定要刪除這筆資料嗎？</p>
+                <h3 className="text-2xl font-display font-black tracking-tight">確認刪除？</h3>
+                <p className="text-zinc-500 -zinc-400 font-medium">此操作無法復原，確定要刪除這筆資料嗎？</p>
               </div>
               <div className="flex gap-3">
                 <Button 
                   variant="outline" 
-                  className="flex-1" 
+                  className="flex-1 py-3" 
                   onClick={() => setConfirmDelete(null)}
                 >
                   取消
                 </Button>
                 <Button 
                   variant="danger" 
-                  className="flex-1" 
+                  className="flex-1 py-3" 
                   onClick={() => deleteItem(confirmDelete.col, confirmDelete.id)}
                 >
-                  刪除
+                  確定刪除
                 </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Summary Modal */}
+      <AnimatePresence>
+        {showSummaryModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-zinc-900/40 backdrop-blur-sm"
+              onClick={() => setShowSummaryModal(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-3xl shadow-2xl max-w-4xl w-full p-6 sm:p-8 flex flex-col max-h-[90vh] border border-zinc-100"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-bold">訂單明細彙整</h3>
+                <button onClick={() => setShowSummaryModal(false)} className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-500">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Tabs for Plans */}
+              <div className="flex overflow-x-auto pb-2 mb-6 gap-2 border-b border-zinc-100 hide-scrollbar">
+                {plans.map(plan => (
+                  <button
+                    key={plan.id}
+                    onClick={() => setSummaryTab(plan.id)}
+                    className={cn(
+                      "px-4 py-2 rounded-t-lg font-medium whitespace-nowrap transition-colors",
+                      (summaryTab === plan.id || (!summaryTab && plans[0]?.id === plan.id))
+                        ? "bg-zinc-100 text-zinc-900 border-b-2 border-zinc-900"
+                        : "text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50"
+                    )}
+                  >
+                    {plan.name}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex-1 overflow-y-auto pr-2 space-y-8">
+                {plans.filter(p => p.id === (summaryTab || plans[0]?.id)).map(plan => {
+                  const planOrders = orders.filter(o => o.planId === plan.id);
+                  
+                  // Group by dish
+                  const dishGroups: { [dishId: string]: { dish: Dish | undefined, totalQuantity: number, users: { name: string, quantity: number }[] } } = {};
+                  
+                  planOrders.forEach(order => {
+                    if (!dishGroups[order.dishId]) {
+                      dishGroups[order.dishId] = {
+                        dish: dishes.find(d => d.id === order.dishId),
+                        totalQuantity: 0,
+                        users: []
+                      };
+                    }
+                    dishGroups[order.dishId].totalQuantity += order.quantity;
+                    
+                    const existingUser = dishGroups[order.dishId].users.find(u => u.name === order.userName);
+                    if (existingUser) {
+                      existingUser.quantity += order.quantity;
+                    } else {
+                      dishGroups[order.dishId].users.push({ name: order.userName, quantity: order.quantity });
+                    }
+                  });
+
+                  const sortedDishGroups = Object.values(dishGroups).sort((a, b) => (b.dish?.price || 0) - (a.dish?.price || 0));
+
+                  return (
+                    <div key={plan.id} className="space-y-8">
+                      {/* Section A */}
+                      <div className="space-y-3">
+                        <h4 className="font-bold text-lg text-orange-600 border-b pb-2">A區 - 報單用</h4>
+                        <div className="bg-zinc-50 p-4 rounded-xl font-mono text-sm whitespace-pre-wrap">
+                          {sortedDishGroups.map(group => (
+                            <div key={group.dish?.id}>${group.dish?.price || 0} {group.dish?.name || '未知菜色'} X {group.totalQuantity}</div>
+                          ))}
+                          {sortedDishGroups.length === 0 && <div className="text-zinc-400">尚無訂單</div>}
+                        </div>
+                      </div>
+
+                      {/* Section B */}
+                      <div className="space-y-3">
+                        <h4 className="font-bold text-lg text-blue-600 border-b pb-2">B區 - 取餐比對用</h4>
+                        <div className="bg-zinc-50 p-4 rounded-xl font-mono text-sm space-y-4">
+                          {sortedDishGroups.map(group => (
+                            <div key={group.dish?.id} className="space-y-1">
+                              <div className="font-bold">${group.dish?.price || 0} {group.dish?.name || '未知菜色'} X {group.totalQuantity}</div>
+                              <div className="text-zinc-600 pl-2">
+                                {group.users.map(u => u.quantity > 1 ? `${u.name}X${u.quantity}` : u.name).join('、')}
+                              </div>
+                            </div>
+                          ))}
+                          {sortedDishGroups.length === 0 && <div className="text-zinc-400">尚無訂單</div>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </motion.div>
           </div>
