@@ -19,7 +19,8 @@ import {
   LogIn,
   LogOut,
   Globe,
-  X
+  X,
+  Smartphone
 } from 'lucide-react';
 import { format, isAfter, parseISO } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
@@ -435,6 +436,7 @@ function AppContent() {
   const [newPlan, setNewPlan] = useState({ name: '', storeId: '', diningDate: '', closingTime: '' });
   const [announcementEdit, setAnnouncementEdit] = useState({ content: '', isActive: false });
   const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [showShortcutModal, setShowShortcutModal] = useState(false);
   const [summaryTab, setSummaryTab] = useState<string | null>(null);
 
   const isAdmin = user?.email?.toLowerCase() === 'chiuchuijen@gmail.com';
@@ -1770,9 +1772,80 @@ function AppContent() {
         )}
       </AnimatePresence>
 
-      {/* Version Number */}
-      <div className="fixed bottom-4 right-4 text-[10px] font-mono text-zinc-400 bg-white/50 backdrop-blur-sm px-2 py-1 rounded-md border border-zinc-100 pointer-events-none">
-        {APP_VERSION}
+      {/* Shortcut Modal */}
+      <AnimatePresence>
+        {showShortcutModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-zinc-900/40 backdrop-blur-sm"
+              onClick={() => setShowShortcutModal(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-6 sm:p-8 flex flex-col max-h-[90vh] border border-zinc-100 overflow-y-auto"
+            >
+              <div className="flex justify-between items-center mb-6 sticky top-0 bg-white z-10 pb-2 border-b border-zinc-100">
+                <h3 className="text-2xl font-bold">桌面捷徑設置方式</h3>
+                <button onClick={() => setShowShortcutModal(false)} className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-500">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-8">
+                {/* iOS Section */}
+                <div className="space-y-4">
+                  <h4 className="font-bold text-lg">iphone /ipad</h4>
+                  <div className="bg-zinc-50 rounded-xl overflow-hidden border border-zinc-100">
+                    <img src="/dt02.png" alt="iOS 捷徑設定" className="w-full object-contain max-h-64 bg-zinc-100" />
+                  </div>
+                  <div className="space-y-2 text-zinc-700">
+                    <p className="font-medium">📱 簡易操作步驟</p>
+                    <p>📱 1. 開啟網頁，點分享：用 Safari 打開網頁，點底部工具列中央的<strong>「分享」</strong>圖示（向上箭頭）。</p>
+                    <p>👉 2. 找到「加入主畫面」：在彈出的選單中向上滑動，找到並點擊<strong>「加入主畫面」</strong>（帶有「+」號的圖示）。</p>
+                    <p>✏️ 3. 命名 & 點新增：自訂你想要的名稱，然後點擊右上角的<strong>「新增」</strong>。</p>
+                    <p>🎉 4. 完成！快速開啟：主畫面會出現一個新圖示，就像 App 一樣，點擊即可快速開啟該網頁。</p>
+                  </div>
+                </div>
+
+                <hr className="border-zinc-100" />
+
+                {/* Android Section */}
+                <div className="space-y-4">
+                  <h4 className="font-bold text-lg">安卓系統</h4>
+                  <div className="bg-zinc-50 rounded-xl overflow-hidden border border-zinc-100">
+                    <img src="/dt01.png" alt="Android 捷徑設定" className="w-full object-contain max-h-64 bg-zinc-100" />
+                  </div>
+                  <div className="space-y-2 text-zinc-700">
+                    <p className="font-medium">📱 Android 操作步驟文字版：</p>
+                    <p>📱 1. 開啟網頁，點「更多」：用 Chrome 打開網頁，點網址列右側的<strong>「三個點」</strong>（更多）圖示。</p>
+                    <p>👉 2. 找到「加到主畫面」：在選單中向下滑動，找到並點擊<strong>「加到主畫面」</strong>。</p>
+                    <p>✏️ 3. 命名 & 點「新增」：自訂捷徑名稱，然後點擊<strong>「新增」</strong>。</p>
+                    <p>🎉 4. 完成！快速開啟：主畫面會出現該網頁的捷徑圖示。</p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Shortcut Setup & Version Number */}
+      <div className="fixed bottom-4 right-4 flex flex-col items-end gap-2 z-40">
+        <button 
+          onClick={() => setShowShortcutModal(true)}
+          className="text-xs font-medium text-zinc-600 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-zinc-200 shadow-sm hover:bg-white transition-colors flex items-center gap-1.5"
+        >
+          <Smartphone className="w-3.5 h-3.5" />
+          捷徑設置
+        </button>
+        <div className="text-[10px] font-mono text-zinc-400 bg-white/50 backdrop-blur-sm px-2 py-1 rounded-md border border-zinc-100 pointer-events-none">
+          {APP_VERSION}
+        </div>
       </div>
     </div>
   );
