@@ -9,13 +9,20 @@ service cloud.firestore {
       return request.auth != null;
     }
     
+    function isSuperAdmin() {
+      return isAuthenticated() && request.auth.token.email.lower() == "chiuchuijen@gmail.com";
+    }
+
+    function hasPermission(perm) {
+      return isSuperAdmin() || 
+        (isAuthenticated() && 
+         exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions[perm] == true);
+    }
+
     function isAdmin() {
-      return isAuthenticated() && 
-        (
-          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-          request.auth.token.email.lower() == "chiuchuijen@gmail.com"
-        );
+      return isSuperAdmin() || 
+        (isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)));
     }
 
     function isValidString(val, min, max) {
@@ -73,37 +80,37 @@ service cloud.firestore {
 
     match /announcements/{id} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if hasPermission('announcements');
     }
 
     match /stores/{storeId} {
       allow read: if true;
-      allow create, update: if isAdmin() && isValidStore(request.resource.data);
-      allow delete: if isAdmin();
+      allow create, update: if hasPermission('stores') && isValidStore(request.resource.data);
+      allow delete: if hasPermission('stores');
     }
 
     match /dishes/{dishId} {
       allow read: if true;
-      allow create, update: if isAdmin() && isValidDish(request.resource.data);
-      allow delete: if isAdmin();
+      allow create, update: if hasPermission('dishes') && isValidDish(request.resource.data);
+      allow delete: if hasPermission('dishes');
     }
 
     match /plans/{planId} {
       allow read: if true;
-      allow create, update: if isAdmin() && isValidPlan(request.resource.data);
-      allow delete: if isAdmin();
+      allow create, update: if hasPermission('plans') && isValidPlan(request.resource.data);
+      allow delete: if hasPermission('plans');
     }
 
     match /orders/{orderId} {
       allow read: if true;
-      allow create: if isValidOrder(request.resource.data) || isAdmin();
-      allow update: if (isValidOrder(request.resource.data) && (request.resource.data.userName == resource.data.userName || (resource.data.uid != null && request.auth != null && resource.data.uid == request.auth.uid))) || isAdmin();
-      allow delete: if isAdmin() || (resource.data.uid == "" && request.auth == null) || (resource.data.uid != null && request.auth != null && resource.data.uid == request.auth.uid);
+      allow create: if isValidOrder(request.resource.data) || hasPermission('orders');
+      allow update: if (isValidOrder(request.resource.data) && (request.resource.data.userName == resource.data.userName || (resource.data.uid != null && request.auth != null && resource.data.uid == request.auth.uid))) || hasPermission('orders');
+      allow delete: if hasPermission('orders') || (resource.data.uid == "" && request.auth == null) || (resource.data.uid != null && request.auth != null && resource.data.uid == request.auth.uid);
     }
 
     match /users/{userId} {
-      allow read: if isAuthenticated() && request.auth.uid == userId;
-      allow write: if isAdmin();
+      allow read: if isSuperAdmin() || (isAuthenticated() && request.auth.uid == userId);
+      allow write: if isSuperAdmin();
     }
   }
 }
