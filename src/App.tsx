@@ -446,6 +446,7 @@ function AppContent() {
   // User State
   const [userTab, setUserTab] = useState<'plans' | 'all-orders'>('plans');
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
+  const [selectedAllOrdersPlanId, setSelectedAllOrdersPlanId] = useState<string | null>(null);
   const [selectedDish, setSelectedDish] = useState<Dish | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [userName, setUserName] = useState('');
@@ -1292,28 +1293,69 @@ function AppContent() {
                   <p className="text-zinc-500">查看各方案的訂購狀況</p>
                 </div>
 
+                {plans.length > 0 && (
+                  <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                    {[...plans].sort((a, b) => b.diningDate.localeCompare(a.diningDate)).map((plan, index) => {
+                      const isActive = selectedAllOrdersPlanId ? selectedAllOrdersPlanId === plan.id : index === 0;
+                      return (
+                        <button
+                          key={plan.id}
+                          onClick={() => setSelectedAllOrdersPlanId(plan.id)}
+                          className={cn(
+                            "px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all",
+                            isActive
+                              ? "bg-orange-100 text-orange-700"
+                              : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+                          )}
+                        >
+                          {plan.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
                 <div className="space-y-8">
-                  {plans.sort((a, b) => b.diningDate.localeCompare(a.diningDate)).map(plan => {
+                  {(() => {
+                    const sortedPlans = [...plans].sort((a, b) => b.diningDate.localeCompare(a.diningDate));
+                    const activePlanId = selectedAllOrdersPlanId || (sortedPlans.length > 0 ? sortedPlans[0].id : null);
+                    if (!activePlanId) return <div className="py-20 text-center text-zinc-400">目前沒有任何方案</div>;
+                    
+                    const plan = plans.find(p => p.id === activePlanId);
+                    if (!plan) return null;
+                    
                     const planOrders = orders.filter(o => o.planId === plan.id);
-                    if (planOrders.length === 0) return null;
                     const store = stores.find(s => s.id === plan.storeId);
-                    const total = planOrders.reduce((acc, o) => {
+                    const totalAmount = planOrders.reduce((acc, o) => {
                       const dish = dishes.find(d => d.id === o.dishId);
                       return acc + (dish?.price || 0) * o.quantity;
                     }, 0);
+                    
+                    const uniqueUsers = new Set(planOrders.map(o => o.userName)).size;
+                    const totalQuantity = planOrders.reduce((acc, o) => acc + o.quantity, 0);
 
                     return (
                       <Card key={plan.id} className="overflow-hidden">
-                        <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-100 flex justify-between items-center">
+                        <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                           <div>
                             <h3 className="font-bold text-lg">{plan.name}</h3>
-                            <div className="text-xs text-zinc-500 flex items-center gap-2">
+                            <div className="text-xs text-zinc-500 flex items-center gap-2 mt-1">
                               <Store className="w-3 h-3" /> {store?.name} | <Calendar className="w-3 h-3" /> {plan.diningDate}
                             </div>
                           </div>
-                          <div className="text-right">
-                            <div className="text-[10px] uppercase font-bold text-zinc-400">總金額</div>
-                            <div className="text-lg font-bold text-orange-600">${total}</div>
+                          <div className="flex gap-6 text-right">
+                            <div>
+                              <div className="text-[10px] uppercase font-bold text-zinc-400">總訂購人數</div>
+                              <div className="text-lg font-bold text-zinc-700">{uniqueUsers} 人</div>
+                            </div>
+                            <div>
+                              <div className="text-[10px] uppercase font-bold text-zinc-400">總訂購數量</div>
+                              <div className="text-lg font-bold text-zinc-700">{totalQuantity} 份</div>
+                            </div>
+                            <div>
+                              <div className="text-[10px] uppercase font-bold text-zinc-400">總金額</div>
+                              <div className="text-lg font-bold text-orange-600">${totalAmount}</div>
+                            </div>
                           </div>
                         </div>
                         <div className="overflow-x-auto">
@@ -1328,7 +1370,7 @@ function AppContent() {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-zinc-50">
-                              {planOrders.map(order => {
+                              {planOrders.length > 0 ? planOrders.map(order => {
                                 const dish = dishes.find(d => d.id === order.dishId);
                                 return (
                                   <tr key={order.id} className="hover:bg-zinc-50/50 transition-colors">
@@ -1349,16 +1391,17 @@ function AppContent() {
                                     </td>
                                   </tr>
                                 );
-                              })}
+                              }) : (
+                                <tr>
+                                  <td colSpan={5} className="px-6 py-8 text-center text-zinc-400">目前沒有任何訂單</td>
+                                </tr>
+                              )}
                             </tbody>
                           </table>
                         </div>
                       </Card>
                     );
-                  })}
-                  {orders.length === 0 && (
-                    <div className="py-20 text-center text-zinc-400">目前沒有任何訂單</div>
-                  )}
+                  })()}
                 </div>
               </div>
             )}
@@ -2075,6 +2118,11 @@ function AppContent() {
                           {sortedDishGroups.map(group => (
                             <div key={group.dish?.id}>${group.dish?.price || 0} {group.dish?.name || '未知菜色'} X {group.totalQuantity}</div>
                           ))}
+                          {sortedDishGroups.length > 0 && (
+                            <div className="mt-4 pt-4 border-t border-zinc-200 font-bold text-orange-600">
+                              總數量：{sortedDishGroups.reduce((acc, group) => acc + group.totalQuantity, 0)} 份
+                            </div>
+                          )}
                           {sortedDishGroups.length === 0 && <div className="text-zinc-400">尚無訂單</div>}
                         </div>
                       </div>
