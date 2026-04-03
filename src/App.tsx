@@ -22,7 +22,7 @@ import {
   X,
   Smartphone
 } from 'lucide-react';
-import { format, isAfter, parseISO } from 'date-fns';
+import { format, isAfter, parseISO, addDays, addHours } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -455,6 +455,7 @@ function AppContent() {
 
   // Admin State
   const [adminTab, setAdminTab] = useState<'plans' | 'stores' | 'dishes' | 'orders' | 'announcement' | 'permissions'>('plans');
+  const [adminSelectedPlanId, setAdminSelectedPlanId] = useState<string | null>(null);
   const [newStore, setNewStore] = useState({ name: '', description: '' });
   const [newAdminUser, setNewAdminUser] = useState({ email: '', password: '', permissions: { plans: false, stores: false, dishes: false, orders: false, announcement: false } });
   const [editingAdminId, setEditingAdminId] = useState<string | null>(null);
@@ -557,6 +558,41 @@ function AppContent() {
       unsubAdminUsers();
     };
   }, [user, isSuperAdmin]);
+
+  // Cleanup old plans: Dining Date + 1 day at 20:00
+  useEffect(() => {
+    if (!plans.length || !isSuperAdmin) return;
+
+    const cleanup = async () => {
+      const now = new Date();
+      const oldPlans = plans.filter(plan => {
+        try {
+          const diningDate = parseISO(plan.diningDate);
+          // Dining Date + 1 day at 20:00
+          const removalTime = addHours(addDays(diningDate, 1), 20);
+          return isAfter(now, removalTime);
+        } catch (e) {
+          return false;
+        }
+      });
+
+      for (const plan of oldPlans) {
+        try {
+          await deleteDoc(doc(db, 'plans', plan.id));
+          // Also delete associated orders
+          const planOrders = orders.filter(o => o.planId === plan.id);
+          for (const order of planOrders) {
+            await deleteDoc(doc(db, 'orders', order.id));
+          }
+          console.log(`Auto-removed expired plan: ${plan.name}`);
+        } catch (error) {
+          console.error(`Error removing old plan ${plan.id}:`, error);
+        }
+      }
+    };
+
+    cleanup();
+  }, [plans, orders, isSuperAdmin]);
 
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
@@ -1648,97 +1684,128 @@ function AppContent() {
                     </div>
                   </div>
 
-                  {plans.map(plan => {
-                    const planOrders = orders.filter(o => o.planId === plan.id);
-                    if (planOrders.length === 0) return null;
+                  {plans.length > 0 && (
+                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide border-b border-zinc-100">
+                      {[...plans].sort((a, b) => b.diningDate.localeCompare(a.diningDate)).map((plan, index) => {
+                        const isActive = adminSelectedPlanId ? adminSelectedPlanId === plan.id : index === 0;
+                        return (
+                          <button
+                            key={plan.id}
+                            onClick={() => setAdminSelectedPlanId(plan.id)}
+                            className={cn(
+                              "px-4 py-2 rounded-t-xl text-sm font-bold whitespace-nowrap transition-all border-b-2",
+                              isActive
+                                ? "border-orange-600 text-orange-600 bg-orange-50/50"
+                                : "border-transparent text-zinc-400 hover:text-zinc-600 hover:bg-zinc-50"
+                            )}
+                          >
+                            {plan.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
 
-                    // Calculate dish summary for this plan
-                    const dishSummary: { [dishId: string]: { name: string, count: number } } = {};
-                    planOrders.forEach(order => {
-                      if (!dishSummary[order.dishId]) {
-                        const dish = dishes.find(d => d.id === order.dishId);
-                        dishSummary[order.dishId] = { name: dish?.name || '未知菜色', count: 0 };
-                      }
-                      dishSummary[order.dishId].count += order.quantity;
-                    });
+                  <div className="space-y-8">
+                    {(() => {
+                      const sortedPlans = [...plans].sort((a, b) => b.diningDate.localeCompare(a.diningDate));
+                      const activePlanId = adminSelectedPlanId || (sortedPlans.length > 0 ? sortedPlans[0].id : null);
+                      if (!activePlanId) return <div className="py-20 text-center text-zinc-400">目前沒有任何方案</div>;
+                      
+                      const plan = plans.find(p => p.id === activePlanId);
+                      if (!plan) return null;
+                      
+                      const planOrders = orders.filter(o => o.planId === plan.id);
+                      const store = stores.find(s => s.id === plan.storeId);
+                      
+                      // Calculate dish summary for this plan
+                      const dishSummary: { [dishId: string]: { name: string, count: number } } = {};
+                      planOrders.forEach(order => {
+                        if (!dishSummary[order.dishId]) {
+                          const dish = dishes.find(d => d.id === order.dishId);
+                          dishSummary[order.dishId] = { name: dish?.name || '未知菜色', count: 0 };
+                        }
+                        dishSummary[order.dishId].count += order.quantity;
+                      });
 
-                    return (
-                      <div key={plan.id} className="space-y-6 border-l-4 border-orange-500 pl-6 py-2">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                          <div className="space-y-1">
-                            <h4 className="text-xl font-bold text-zinc-900">{plan.name}</h4>
-                            <div className="flex items-center gap-4 text-sm text-zinc-500">
-                              <span className="flex items-center gap-1"><Calendar className="w-4 h-4" /> {plan.diningDate}</span>
-                              <span className="flex items-center gap-1"><Store className="w-4 h-4" /> {stores.find(s => s.id === plan.storeId)?.name}</span>
+                      return (
+                        <div key={plan.id} className="space-y-6">
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-zinc-50/50 p-6 rounded-2xl border border-zinc-100">
+                            <div className="space-y-1">
+                              <h4 className="text-xl font-bold text-zinc-900">{plan.name}</h4>
+                              <div className="flex items-center gap-4 text-sm text-zinc-500">
+                                <span className="flex items-center gap-1"><Calendar className="w-4 h-4" /> {plan.diningDate}</span>
+                                <span className="flex items-center gap-1"><Store className="w-4 h-4" /> {store?.name || '未知店家'}</span>
+                              </div>
+                            </div>
+                            
+                            {/* Dish Summary Cards */}
+                            <div className="flex flex-wrap gap-2">
+                              {Object.values(dishSummary).map((item, idx) => (
+                                <div key={idx} className="bg-orange-50 text-orange-700 px-3 py-1.5 rounded-lg text-sm font-bold border border-orange-100 flex items-center gap-2">
+                                  <span>{item.name}</span>
+                                  <span className="bg-orange-600 text-white px-1.5 py-0.5 rounded text-[10px] min-w-[20px] text-center">{item.count}</span>
+                                </div>
+                              ))}
                             </div>
                           </div>
-                          
-                          {/* Dish Summary Cards */}
-                          <div className="flex flex-wrap gap-2">
-                            {Object.values(dishSummary).map((item, idx) => (
-                              <div key={idx} className="bg-orange-50 text-orange-700 px-3 py-1.5 rounded-lg text-sm font-bold border border-orange-100 flex items-center gap-2">
-                                <span>{item.name}</span>
-                                <span className="bg-orange-600 text-white px-1.5 py-0.5 rounded text-[10px] min-w-[20px] text-center">{item.count}</span>
-                              </div>
-                            ))}
+
+                          <div className="overflow-x-auto bg-white rounded-xl border border-zinc-100 shadow-sm">
+                            <table className="w-full text-left">
+                              <thead>
+                                <tr className="border-b border-zinc-100 text-zinc-400 text-[10px] uppercase tracking-wider">
+                                  <th className="py-3 px-4 font-bold">姓名</th>
+                                  <th className="py-3 px-4 font-bold">菜色</th>
+                                  <th className="py-3 px-4 font-bold">數量</th>
+                                  <th className="py-3 px-4 font-bold text-center">付款狀態</th>
+                                  <th className="py-3 px-4 font-bold">總金額</th>
+                                  <th className="py-3 px-4 font-bold">訂購時間</th>
+                                  <th className="py-3 px-4 font-bold">操作</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-zinc-50">
+                                {planOrders.length > 0 ? planOrders.map(order => {
+                                  const dish = dishes.find(d => d.id === order.dishId);
+                                  return (
+                                    <tr key={order.id} className="hover:bg-zinc-50/50 transition-colors">
+                                      <td className="py-4 px-4 font-bold">{order.userName}</td>
+                                      <td className="py-4 px-4 text-zinc-600">{dish?.name}</td>
+                                      <td className="py-4 px-4 text-zinc-600">{order.quantity || 0}</td>
+                                      <td className="py-4 px-4 text-center">
+                                        <button 
+                                          onClick={() => togglePaymentStatus(order)}
+                                          className={cn(
+                                            "px-3 py-1 rounded-full text-[10px] font-bold transition-all",
+                                            order.isPaid 
+                                              ? "bg-green-100 text-green-700 hover:bg-green-200" 
+                                              : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+                                          )}
+                                        >
+                                          {order.isPaid ? '已付款' : '未付款'}
+                                        </button>
+                                      </td>
+                                      <td className="py-4 px-4 text-orange-600 font-bold">${(dish?.price || 0) * (order.quantity || 0)}</td>
+                                      <td className="py-4 px-4 text-zinc-400 text-xs">{format(parseISO(order.timestamp), 'MM/dd HH:mm')}</td>
+                                      <td className="py-4 px-4">
+                                        <div className="flex items-center gap-2">
+                                          <button onClick={() => startEditOrder(order)} className="text-zinc-400 hover:text-orange-600"><Edit2 className="w-4 h-4" /></button>
+                                          <button onClick={() => setConfirmDelete({ col: 'orders', id: order.id })} className="text-zinc-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                }) : (
+                                  <tr>
+                                    <td colSpan={7} className="py-12 text-center text-zinc-400">目前尚無訂單</td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
                           </div>
                         </div>
-
-                        <div className="overflow-x-auto bg-white rounded-xl border border-zinc-100 shadow-sm">
-                          <table className="w-full text-left">
-                            <thead>
-                              <tr className="border-b border-zinc-100 text-zinc-400 text-[10px] uppercase tracking-wider">
-                                <th className="py-3 px-4 font-bold">姓名</th>
-                                <th className="py-3 px-4 font-bold">菜色</th>
-                                <th className="py-3 px-4 font-bold">數量</th>
-                                <th className="py-3 px-4 font-bold text-center">付款狀態</th>
-                                <th className="py-3 px-4 font-bold">總金額</th>
-                                <th className="py-3 px-4 font-bold">訂購時間</th>
-                                <th className="py-3 px-4 font-bold">操作</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-zinc-50">
-                              {planOrders.map(order => {
-                                const dish = dishes.find(d => d.id === order.dishId);
-                                return (
-                                  <tr key={order.id} className="hover:bg-zinc-50/50 transition-colors">
-                                    <td className="py-4 px-4 font-bold">{order.userName}</td>
-                                    <td className="py-4 px-4 text-zinc-600">{dish?.name}</td>
-                                    <td className="py-4 px-4 text-zinc-600">{order.quantity || 0}</td>
-                                    <td className="py-4 px-4 text-center">
-                                      <button 
-                                        onClick={() => togglePaymentStatus(order)}
-                                        className={cn(
-                                          "px-3 py-1 rounded-full text-[10px] font-bold transition-all",
-                                          order.isPaid 
-                                            ? "bg-green-100 text-green-700 hover:bg-green-200" 
-                                            : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
-                                        )}
-                                      >
-                                        {order.isPaid ? '已付款' : '未付款'}
-                                      </button>
-                                    </td>
-                                    <td className="py-4 px-4 text-orange-600 font-bold">${(dish?.price || 0) * (order.quantity || 0)}</td>
-                                    <td className="py-4 px-4 text-zinc-400 text-xs">{format(parseISO(order.timestamp), 'MM/dd HH:mm')}</td>
-                                    <td className="py-4 px-4">
-                                      <div className="flex items-center gap-2">
-                                        <button onClick={() => startEditOrder(order)} className="text-zinc-400 hover:text-orange-600"><Edit2 className="w-4 h-4" /></button>
-                                        <button onClick={() => setConfirmDelete({ col: 'orders', id: order.id })} className="text-zinc-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {orders.length === 0 && (
-                    <div className="py-20 text-center text-zinc-400">目前沒有任何訂單紀錄</div>
-                  )}
+                      );
+                    })()}
+                  </div>
                 </div>
               )}
 
