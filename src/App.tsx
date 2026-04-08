@@ -456,6 +456,7 @@ function AppContent() {
   // Admin State
   const [adminTab, setAdminTab] = useState<'plans' | 'stores' | 'dishes' | 'orders' | 'announcement' | 'permissions'>('plans');
   const [adminSelectedPlanId, setAdminSelectedPlanId] = useState<string | null>(null);
+  const [adminSelectedDishStoreId, setAdminSelectedDishStoreId] = useState<string | null>(null);
   const [newStore, setNewStore] = useState({ name: '', description: '' });
   const [newAdminUser, setNewAdminUser] = useState({ email: '', password: '', permissions: { plans: false, stores: false, dishes: false, orders: false, announcement: false } });
   const [editingAdminId, setEditingAdminId] = useState<string | null>(null);
@@ -1617,57 +1618,109 @@ function AppContent() {
                   </div>
 
                   <div className="space-y-10">
-                    {stores.map(store => {
-                      const storeDishes = dishes.filter(d => d.storeId === store.id);
-                      if (storeDishes.length === 0) return null;
-                      
-                      // Group by category
-                      const categories = Array.from(new Set(storeDishes.map(d => d.category || '未分類')));
+                    {stores.length > 0 && (
+                      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide border-b border-zinc-100">
+                        {stores.map((store, index) => {
+                          const isActive = adminSelectedDishStoreId ? adminSelectedDishStoreId === store.id : index === 0;
+                          const storeDishesCount = dishes.filter(d => d.storeId === store.id).length;
+                          return (
+                            <button
+                              key={store.id}
+                              onClick={() => setAdminSelectedDishStoreId(store.id)}
+                              className={cn(
+                                "px-4 py-2 rounded-t-xl text-sm font-bold whitespace-nowrap transition-all border-b-2 flex items-center gap-2",
+                                isActive
+                                  ? "border-orange-600 text-orange-600 bg-orange-50/50"
+                                  : "border-transparent text-zinc-400 hover:text-zinc-600 hover:bg-zinc-50"
+                              )}
+                            >
+                              {store.name}
+                              <span className={cn(
+                                "text-[10px] px-1.5 py-0.5 rounded-full",
+                                isActive ? "bg-orange-600 text-white" : "bg-zinc-100 text-zinc-400"
+                              )}>
+                                {storeDishesCount}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
 
-                      return (
-                        <div key={store.id} className="space-y-4">
-                          <div className="flex items-center gap-3 pb-2 border-b border-zinc-100">
-                            <Store className="w-5 h-5 text-orange-600" />
-                            <h3 className="text-lg font-bold">{store.name}</h3>
-                            <span className="text-xs text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full">{storeDishes.length} 筆菜色</span>
-                          </div>
-                          
-                          <div className="grid grid-cols-1 gap-6">
-                            {categories.map(cat => (
-                              <div key={cat} className="space-y-2 pl-4 border-l-2 border-zinc-100">
-                                <h4 className="text-sm font-bold text-zinc-400 uppercase tracking-wider">{cat}</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                  {storeDishes.filter(d => (d.category || '未分類') === cat).map(dish => (
-                                    <div key={dish.id} className="p-3 rounded-xl border border-zinc-100 -zinc-800 flex justify-between items-center bg-white -zinc-800 hover:border-zinc-200 transition-all shadow-sm">
-                                      <div>
-                                        <div className="font-bold text-sm">{dish.name}</div>
-                                        <div className="text-orange-600 font-bold text-xs">${dish.price}</div>
-                                      </div>
-                                      <div className="flex items-center gap-1">
-                                        <button 
-                                          onClick={() => startEditDish(dish)}
-                                          className="p-2 text-zinc-300 hover:text-orange-600 transition-colors"
-                                          title={t('edit')}
-                                        >
-                                          <Edit2 className="w-4 h-4" />
-                                        </button>
-                                        <button 
-                                          onClick={() => setConfirmDelete({ col: 'dishes', id: dish.id })} 
-                                          className="p-2 text-zinc-300 hover:text-red-500 transition-colors"
-                                          title={t('delete')}
-                                        >
-                                          <Trash2 className="w-4 h-4" />
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
+                    <div className="space-y-8">
+                      {(() => {
+                        const activeStoreId = adminSelectedDishStoreId || (stores.length > 0 ? stores[0].id : null);
+                        if (!activeStoreId) return <div className="py-20 text-center text-zinc-400">目前沒有任何店家</div>;
+                        
+                        const store = stores.find(s => s.id === activeStoreId);
+                        if (!store) return null;
+                        
+                        const storeDishes = dishes.filter(d => d.storeId === store.id);
+                        
+                        // Group by category
+                        const categories = Array.from(new Set(storeDishes.map(d => d.category || '未分類')));
+
+                        return (
+                          <div key={store.id} className="space-y-6">
+                            <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
+                              <div className="flex items-center gap-3">
+                                <Store className="w-5 h-5 text-orange-600" />
+                                <h3 className="text-lg font-bold">{store.name}</h3>
                               </div>
-                            ))}
+                              <span className="text-xs font-bold text-zinc-400">{storeDishes.length} 筆菜色</span>
+                            </div>
+                            
+                            {storeDishes.length > 0 ? (
+                              <div className="grid grid-cols-1 gap-8">
+                                {categories.map(cat => (
+                                  <div key={cat} className="space-y-4">
+                                    <h4 className="text-xs font-black text-zinc-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+                                      {cat}
+                                    </h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                      {storeDishes.filter(d => (d.category || '未分類') === cat).map(dish => (
+                                        <div key={dish.id} className="p-4 rounded-2xl border border-zinc-100 flex justify-between items-center bg-white hover:border-orange-200 hover:shadow-md hover:shadow-orange-500/5 transition-all group">
+                                          <div>
+                                            <div className="font-bold text-zinc-800 group-hover:text-orange-600 transition-colors">{dish.name}</div>
+                                            <div className="text-orange-600 font-black mt-1">
+                                              <span className="text-[10px] mr-0.5">$</span>
+                                              {dish.price}
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button 
+                                              onClick={() => startEditDish(dish)}
+                                              className="p-2 text-zinc-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-all"
+                                              title={t('edit')}
+                                            >
+                                              <Edit2 className="w-4 h-4" />
+                                            </button>
+                                            <button 
+                                              onClick={() => setConfirmDelete({ col: 'dishes', id: dish.id })} 
+                                              className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                              title={t('delete')}
+                                            >
+                                              <Trash2 className="w-4 h-4" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="py-20 text-center bg-zinc-50 rounded-3xl border border-dashed border-zinc-200">
+                                <Utensils className="w-12 h-12 text-zinc-200 mx-auto mb-4" />
+                                <p className="text-zinc-400 font-medium">此店家目前沒有菜色</p>
+                                <p className="text-xs text-zinc-300 mt-1">請使用上方表單新增菜色</p>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })()}
+                    </div>
                   </div>
                 </div>
               )}
