@@ -20,7 +20,8 @@ import {
   LogOut,
   Globe,
   X,
-  Smartphone
+  Smartphone,
+  ShieldCheck
 } from 'lucide-react';
 import { format, isAfter, parseISO, addDays, addHours } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
@@ -462,6 +463,12 @@ function AppContent() {
   const [editingAdminId, setEditingAdminId] = useState<string | null>(null);
   const [newDish, setNewDish] = useState({ storeId: '', name: '', price: '', category: '' });
   const [editingDishId, setEditingDishId] = useState<string | null>(null);
+  const [editingStoreId, setEditingStoreId] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ 
+    title: string, 
+    message: string, 
+    onConfirm: () => void 
+  } | null>(null);
   const [bulkDishInput, setBulkDishInput] = useState('');
   const [newPlan, setNewPlan] = useState({ name: '', storeId: '', diningDate: '', closingTime: '' });
   const [announcementEdit, setAnnouncementEdit] = useState({ content: '', isActive: false });
@@ -749,14 +756,34 @@ function AppContent() {
 
   const addStore = async () => {
     if (!newStore.name) return;
-    const storeRef = doc(collection(db, 'stores'));
-    const id = storeRef.id;
-    try {
-      await setDoc(storeRef, { id, ...newStore });
-      setNewStore({ name: '', description: '' });
-    } catch (e) {
-      handleFirestoreError(e, OperationType.WRITE, 'stores');
-    }
+
+    const performSave = async () => {
+      try {
+        if (editingStoreId) {
+          await setDoc(doc(db, 'stores', editingStoreId), { ...newStore, id: editingStoreId }, { merge: true });
+          setEditingStoreId(null);
+        } else {
+          const storeRef = doc(collection(db, 'stores'));
+          const id = storeRef.id;
+          await setDoc(storeRef, { id, ...newStore });
+        }
+        setNewStore({ name: '', description: '' });
+        setConfirmAction(null);
+      } catch (e) {
+        handleFirestoreError(e, OperationType.WRITE, 'stores');
+      }
+    };
+
+    setConfirmAction({
+      title: editingStoreId ? "確認修改店家？" : "確認新增店家？",
+      message: `確定要${editingStoreId ? "修改" : "新增"}「${newStore.name}」嗎？`,
+      onConfirm: performSave
+    });
+  };
+
+  const startEditStore = (store: Store) => {
+    setNewStore({ name: store.name, description: store.description });
+    setEditingStoreId(store.id);
   };
 
   const exportStores = () => {
@@ -804,27 +831,36 @@ function AppContent() {
     const price = parseFloat(newDish.price);
     if (!newDish.name || !newDish.storeId || isNaN(price) || price < 0) return;
     
-    try {
-      if (editingDishId) {
-        await setDoc(doc(db, 'dishes', editingDishId), { 
-          ...newDish, 
-          id: editingDishId,
-          price 
-        });
-        setEditingDishId(null);
-      } else {
-        const dishRef = doc(collection(db, 'dishes'));
-        const id = dishRef.id;
-        await setDoc(dishRef, { 
-          id, 
-          ...newDish, 
-          price
-        });
+    const performSave = async () => {
+      try {
+        if (editingDishId) {
+          await setDoc(doc(db, 'dishes', editingDishId), { 
+            ...newDish, 
+            id: editingDishId,
+            price 
+          });
+          setEditingDishId(null);
+        } else {
+          const dishRef = doc(collection(db, 'dishes'));
+          const id = dishRef.id;
+          await setDoc(dishRef, { 
+            id, 
+            ...newDish, 
+            price
+          });
+        }
+        setNewDish({ ...newDish, name: '', price: '' }); // Keep storeId and category
+        setConfirmAction(null);
+      } catch (e) {
+        handleFirestoreError(e, OperationType.WRITE, 'dishes');
       }
-      setNewDish({ ...newDish, name: '', price: '' }); // Keep storeId and category
-    } catch (e) {
-      handleFirestoreError(e, OperationType.WRITE, 'dishes');
-    }
+    };
+
+    setConfirmAction({
+      title: editingDishId ? "確認修改菜色？" : "確認新增菜色？",
+      message: `確定要${editingDishId ? "修改" : "新增"}「${newDish.name}」嗎？`,
+      onConfirm: performSave
+    });
   };
 
   const exportDishes = () => {
@@ -1540,17 +1576,44 @@ function AppContent() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end bg-zinc-50 p-4 rounded-xl">
                     <Input label="店家名稱" value={newStore.name} onChange={v => setNewStore({...newStore, name: v})} placeholder="例如：老王便當" />
                     <Input label="店家描述" value={newStore.description} onChange={v => setNewStore({...newStore, description: v})} placeholder="例如：排骨飯很好吃" />
-                    <Button onClick={addStore}><Plus className="w-4 h-4 inline mr-2" /> 新增店家</Button>
+                    <div className="flex gap-2">
+                      <Button onClick={addStore} className="flex-1">
+                        {editingStoreId ? <><Edit2 className="w-4 h-4 inline mr-2" /> 更新店家</> : <><Plus className="w-4 h-4 inline mr-2" /> 新增店家</>}
+                      </Button>
+                      {editingStoreId && (
+                        <Button variant="outline" onClick={() => {
+                          setEditingStoreId(null);
+                          setNewStore({ name: '', description: '' });
+                        }}>
+                          取消
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {stores.map(store => (
-                      <div key={store.id} className="p-4 rounded-xl border border-zinc-100 flex justify-between items-center">
+                      <div key={store.id} className="p-4 rounded-xl border border-zinc-100 flex justify-between items-center hover:border-orange-200 hover:shadow-sm transition-all group/store">
                         <div>
-                          <div className="font-bold">{store.name}</div>
+                          <div className="font-bold text-zinc-800">{store.name}</div>
                           <div className="text-sm text-zinc-500">{store.description}</div>
                         </div>
-                        <button onClick={() => setConfirmDelete({ col: 'stores', id: store.id })} className="text-zinc-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                        <div className="flex items-center gap-1">
+                          <button 
+                            onClick={() => startEditStore(store)} 
+                            className="p-2 text-zinc-300 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-all"
+                            title="編輯店家"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => setConfirmDelete({ col: 'stores', id: store.id })} 
+                            className="p-2 text-zinc-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                            title="刪除店家"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1680,15 +1743,15 @@ function AppContent() {
                                     </h4>
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                       {storeDishes.filter(d => (d.category || '未分類') === cat).map(dish => (
-                                        <div key={dish.id} className="p-4 rounded-2xl border border-zinc-100 flex justify-between items-center bg-white hover:border-orange-200 hover:shadow-md hover:shadow-orange-500/5 transition-all group">
+                                    <div key={dish.id} className="p-4 rounded-2xl border border-zinc-100 flex justify-between items-center bg-white hover:border-orange-200 hover:shadow-md hover:shadow-orange-500/5 transition-all">
                                           <div>
-                                            <div className="font-bold text-zinc-800 group-hover:text-orange-600 transition-colors">{dish.name}</div>
+                                            <div className="font-bold text-zinc-800">{dish.name}</div>
                                             <div className="text-orange-600 font-black mt-1">
                                               <span className="text-[10px] mr-0.5">$</span>
                                               {dish.price}
                                             </div>
                                           </div>
-                                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <div className="flex items-center gap-1 transition-opacity">
                                             <button 
                                               onClick={() => startEditDish(dish)}
                                               className="p-2 text-zinc-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-all"
@@ -2060,6 +2123,51 @@ function AppContent() {
                     <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                   </svg>
                   Google 登入
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Action Confirmation Modal */}
+      <AnimatePresence>
+        {confirmAction && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setConfirmAction(null)}
+              className="absolute inset-0 bg-zinc-900/40 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-3xl shadow-2xl max-w-sm w-full p-8 space-y-6 border border-zinc-100"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+                <ShieldCheck className="w-8 h-8 text-orange-500" />
+              </div>
+              <div className="text-center space-y-2">
+                <h3 className="text-2xl font-display font-black tracking-tight">{confirmAction.title}</h3>
+                <p className="text-zinc-500 font-medium">{confirmAction.message}</p>
+              </div>
+              <div className="flex gap-3">
+                <Button 
+                  variant="outline" 
+                  className="flex-1 py-3" 
+                  onClick={() => setConfirmAction(null)}
+                >
+                  取消
+                </Button>
+                <Button 
+                  className="flex-1 py-3" 
+                  onClick={confirmAction.onConfirm}
+                >
+                  確定
                 </Button>
               </div>
             </motion.div>
