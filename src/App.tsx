@@ -110,6 +110,7 @@ interface TgSettings {
   notifyNewPlan: boolean;
   notifyNewOrder: boolean;
   notifyPlanClose: boolean;
+  notifyReport: boolean;
 }
 
 // --- Components ---
@@ -453,7 +454,8 @@ function AppContent() {
     chatId: '',
     notifyNewPlan: false,
     notifyNewOrder: false,
-    notifyPlanClose: false
+    notifyPlanClose: false,
+    notifyReport: false
   });
   const [showAnnouncement, setShowAnnouncement] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -488,6 +490,9 @@ function AppContent() {
   const [newPlan, setNewPlan] = useState({ name: '', storeId: '', diningDate: '', closingTime: '' });
   const [announcementEdit, setAnnouncementEdit] = useState({ content: '', isActive: false });
   const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportText, setReportText] = useState('');
+  const [reportPlanId, setReportPlanId] = useState<string | null>(null);
   const [showShortcutModal, setShowShortcutModal] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
@@ -764,6 +769,45 @@ ${summaryA}
 ${summaryB}`;
 
     await sendTelegramMessage(text);
+  };
+
+  const submitReport = async () => {
+    if (!reportText.trim()) return;
+    if (!tgSettings.notifyReport) {
+      alert('管理員未啟用回報通知功能。');
+      return;
+    }
+
+    let text = '';
+    if (reportPlanId) {
+      const plan = plans.find(p => p.id === reportPlanId);
+      if (plan) {
+        const store = stores.find(s => s.id === plan.storeId);
+        text = `⚠️ <b>使用者回報 (方案)</b>
+    
+<b>方案名:</b> ${plan.name}
+<b>店家:</b> ${store?.name || '未知'}
+<b>時間:</b> ${new Date().toLocaleString('zh-TW')}
+
+<b>內容:</b>
+${reportText}`;
+      }
+    }
+
+    if (!text) {
+      text = `⚠️ <b>系統意見回報</b>
+    
+<b>時間:</b> ${new Date().toLocaleString('zh-TW')}
+
+<b>內容:</b>
+${reportText}`;
+    }
+
+    await sendTelegramMessage(text);
+    alert('已成功發送您的回報！');
+    setShowReportModal(false);
+    setReportText('');
+    setReportPlanId(null);
   };
 
   const handleOrder = async () => {
@@ -1233,6 +1277,17 @@ ${summaryB}`;
           <div className="flex items-center gap-4">
             {/* Theme & Language Switchers */}
             <div className="flex items-center gap-2 mr-2">
+              <button 
+                onClick={() => {
+                  setReportPlanId(null);
+                  setShowReportModal(true);
+                }}
+                className="flex items-center gap-1.5 text-xs font-bold text-zinc-500 hover:text-orange-600 transition-colors mr-2"
+                title="系統回報"
+              >
+                <AlertCircle className="w-4 h-4" />
+                <span className="hidden sm:inline">系統回報</span>
+              </button>
               <select 
                 value={language} 
                 onChange={(e) => setLanguage(e.target.value as any)}
@@ -1341,8 +1396,21 @@ ${summaryB}`;
                                 <span className="font-medium">{store?.name || '未知店家'}</span>
                               </div>
                             </div>
-                            <div className="bg-orange-50 -orange-900/20 text-orange-700 -orange-400 px-3.5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider">
-                              進行中
+                            <div className="flex bg-orange-50 -orange-900/20 rounded-full divide-x divide-orange-200 overflow-hidden border border-orange-100">
+                              <div className="text-orange-700 px-3.5 py-1.5 text-[10px] font-black uppercase tracking-wider flex items-center justify-center">
+                                進行中
+                              </div>
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setReportPlanId(plan.id);
+                                  setShowReportModal(true);
+                                }}
+                                className="text-orange-600 hover:bg-orange-100 hover:text-orange-800 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition-colors flex items-center justify-center"
+                                title="問題回報"
+                              >
+                                回報
+                              </button>
                             </div>
                           </div>
                           
@@ -2223,7 +2291,7 @@ ${summaryB}`;
                           <label key={perm} className="flex items-center gap-2 cursor-pointer">
                             <input 
                               type="checkbox" 
-                              checked={newAdminUser.permissions[perm]}
+                              checked={!!newAdminUser.permissions[perm]}
                               onChange={e => setNewAdminUser({
                                 ...newAdminUser, 
                                 permissions: { ...newAdminUser.permissions, [perm]: e.target.checked }
@@ -2324,14 +2392,14 @@ ${summaryB}`;
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <Input 
                           label="Bot Token" 
-                          value={tgSettings.botToken} 
+                          value={tgSettings.botToken || ''} 
                           onChange={v => setTgSettings({ ...tgSettings, botToken: v })} 
                           placeholder="請輸入 Bot Token" 
                           type="password"
                         />
                         <Input 
                           label="Chat ID" 
-                          value={tgSettings.chatId} 
+                          value={tgSettings.chatId || ''} 
                           onChange={v => setTgSettings({ ...tgSettings, chatId: v })} 
                           placeholder="請輸入 Chat ID" 
                         />
@@ -2342,7 +2410,7 @@ ${summaryB}`;
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input 
                               type="checkbox" 
-                              checked={tgSettings.notifyNewPlan}
+                              checked={!!tgSettings.notifyNewPlan}
                               onChange={e => setTgSettings({ ...tgSettings, notifyNewPlan: e.target.checked })}
                               className="w-4 h-4 text-blue-600 rounded border-blue-300 focus:ring-blue-500"
                             />
@@ -2351,7 +2419,7 @@ ${summaryB}`;
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input 
                               type="checkbox" 
-                              checked={tgSettings.notifyNewOrder}
+                              checked={!!tgSettings.notifyNewOrder}
                               onChange={e => setTgSettings({ ...tgSettings, notifyNewOrder: e.target.checked })}
                               className="w-4 h-4 text-blue-600 rounded border-blue-300 focus:ring-blue-500"
                             />
@@ -2360,11 +2428,20 @@ ${summaryB}`;
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input 
                               type="checkbox" 
-                              checked={tgSettings.notifyPlanClose}
+                              checked={!!tgSettings.notifyPlanClose}
                               onChange={e => setTgSettings({ ...tgSettings, notifyPlanClose: e.target.checked })}
                               className="w-4 h-4 text-blue-600 rounded border-blue-300 focus:ring-blue-500"
                             />
                             <span className="text-sm text-blue-900">結單通知</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={!!tgSettings.notifyReport}
+                              onChange={e => setTgSettings({ ...tgSettings, notifyReport: e.target.checked })}
+                              className="w-4 h-4 text-blue-600 rounded border-blue-300 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-blue-900">回報通知</span>
                           </label>
                         </div>
                       </div>
@@ -2569,6 +2646,49 @@ ${summaryB}`;
                 >
                   確定刪除
                 </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Report Modal */}
+      <AnimatePresence>
+        {showReportModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-zinc-900/40 backdrop-blur-sm"
+              onClick={() => setShowReportModal(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-3xl shadow-2xl max-w-md w-full p-6"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold">問題回報</h3>
+                <button onClick={() => setShowReportModal(false)} className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-500">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-zinc-700 mb-1">回報內容</label>
+                  <textarea
+                    value={reportText}
+                    onChange={(e) => setReportText(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all resize-none h-32"
+                    placeholder="請輸入您想回報的問題或建議..."
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <Button variant="outline" className="flex-1 py-3" onClick={() => setShowReportModal(false)}>取消</Button>
+                  <Button className="flex-1 py-3" onClick={submitReport}>發送回報</Button>
+                </div>
               </div>
             </motion.div>
           </div>
