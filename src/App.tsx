@@ -21,7 +21,8 @@ import {
   Globe,
   X,
   Smartphone,
-  ShieldCheck
+  ShieldCheck,
+  Copy
 } from 'lucide-react';
 import { format, isAfter, parseISO, addDays, addHours } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
@@ -1268,7 +1269,19 @@ ${summaryB}`;
       <header className="border-b sticky top-0 z-10 transition-colors duration-300 backdrop-blur-md bg-white/80 border-zinc-200">
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2 cursor-pointer group" onClick={() => setView('user')}>
-            <div className="w-10 h-10 bg-orange-600 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/30 group-hover:scale-110 transition-transform">
+            <img 
+              src="/logo.png" 
+              alt="Logo" 
+              className="w-10 h-10 object-cover rounded-xl shadow-lg shadow-orange-500/30 group-hover:scale-110 transition-transform bg-white"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                if (e.currentTarget.nextElementSibling) {
+                  e.currentTarget.nextElementSibling.classList.remove('hidden');
+                  e.currentTarget.nextElementSibling.classList.add('flex');
+                }
+              }}
+            />
+            <div className="hidden w-10 h-10 bg-orange-600 rounded-xl items-center justify-center shadow-lg shadow-orange-500/30 group-hover:scale-110 transition-transform">
               <ShoppingBag className="w-6 h-6 text-white" />
             </div>
             <span className="font-display font-black text-xl tracking-tight">{t('title')}</span>
@@ -2774,8 +2787,34 @@ ${summaryB}`;
                             <div key={group.dish?.id}>${group.dish?.price || 0} {group.dish?.name || '未知菜色'} X {group.totalQuantity}</div>
                           ))}
                           {sortedDishGroups.length > 0 && (
-                            <div className="mt-4 pt-4 border-t border-zinc-200 font-bold text-orange-600">
-                              總數量：{sortedDishGroups.reduce((acc, group) => acc + group.totalQuantity, 0)} 份
+                            <div className="mt-4 pt-4 border-t border-zinc-200 font-bold text-orange-600 flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                總數量：{sortedDishGroups.reduce((acc, group) => acc + group.totalQuantity, 0)} 份
+                                <span className="ml-4">總金額：${sortedDishGroups.reduce((acc, group) => acc + (group.dish?.price || 0) * group.totalQuantity, 0)}</span>
+                              </div>
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  const details = sortedDishGroups.map(group => `$${group.dish?.price || 0} ${group.dish?.name || '未知菜色'} X ${group.totalQuantity}`).join('\n');
+                                  const totalQ = sortedDishGroups.reduce((acc, group) => acc + group.totalQuantity, 0);
+                                  const totalA = sortedDishGroups.reduce((acc, group) => acc + (group.dish?.price || 0) * group.totalQuantity, 0);
+                                  const copyText = `${details}\n\n總數量：${totalQ} 份\n總金額：$${totalA}`;
+                                  navigator.clipboard.writeText(copyText).then(() => {
+                                    const btn = e.currentTarget;
+                                    const originalText = btn.innerHTML;
+                                    btn.innerHTML = '<span class="flex items-center gap-1.5"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check"><path d="M20 6 9 17l-5-5"/></svg>已複製</span>';
+                                    setTimeout(() => {
+                                      btn.innerHTML = originalText;
+                                    }, 2000);
+                                  }).catch(err => {
+                                    alert('複製失敗，請手動複製');
+                                  });
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-lg text-xs font-bold transition-colors"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                                複製
+                              </button>
                             </div>
                           )}
                           {sortedDishGroups.length === 0 && <div className="text-zinc-400">尚無訂單</div>}
