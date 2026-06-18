@@ -83,6 +83,7 @@ interface Plan {
   storeId: string;
   diningDate: string;
   closingTime: string;
+  isClosed?: boolean;
 }
 
 interface Order {
@@ -101,6 +102,14 @@ interface Announcement {
   content: string;
   isActive: boolean;
   updatedAt?: string;
+}
+
+interface TgSettings {
+  botToken: string;
+  chatId: string;
+  notifyNewPlan: boolean;
+  notifyNewOrder: boolean;
+  notifyPlanClose: boolean;
 }
 
 // --- Components ---
@@ -215,10 +224,9 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   if (errInfo.error.includes('permission')) {
     const userMsg = auth.currentUser 
       ? `權限不足：您目前的帳號 (${auth.currentUser.email}) 沒有執行此操作的權限。`
-      : `權限不足：請先登入 Google 帳號，或確認您輸入的姓名/代號與原訂單一致。`;
+      : `權限不足：請先確認您的操作權限。`;
     alert(userMsg);
   }
-  throw new Error(JSON.stringify(errInfo));
 }
 
 // --- Error Boundary ---
@@ -440,6 +448,13 @@ function AppContent() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
+  const [tgSettings, setTgSettings] = useState<TgSettings>({
+    botToken: '',
+    chatId: '',
+    notifyNewPlan: false,
+    notifyNewOrder: false,
+    notifyPlanClose: false
+  });
   const [showAnnouncement, setShowAnnouncement] = useState(false);
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState<{ col: string, id: string } | null>(null);
@@ -542,6 +557,12 @@ function AppContent() {
       }
     }, (error) => handleFirestoreError(error, OperationType.GET, 'announcements'));
 
+    const unsubTgSettings = onSnapshot(doc(db, 'settings', 'telegram'), (snapshot) => {
+      if (snapshot.exists()) {
+        setTgSettings(snapshot.data() as TgSettings);
+      }
+    }, (error) => handleFirestoreError(error, OperationType.GET, 'settings'));
+
     let unsubAdminUsers = () => {};
     if (isSuperAdmin) {
       unsubAdminUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
@@ -563,9 +584,36 @@ function AppContent() {
       unsubPlans();
       unsubOrders();
       unsubAnnounce();
+      unsubTgSettings();
       unsubAdminUsers();
     };
   }, [user, isSuperAdmin]);
+
+  // Auto-close plans when time is reached (Admin only)
+  useEffect(() => {
+    if (!plans.length || !user) return;
+    const isAdmin = isSuperAdmin || adminUsers.some(a => a.id === user.uid);
+    if (!isAdmin) return;
+
+    const interval = setInterval(async () => {
+      const now = new Date();
+      for (const plan of plans) {
+        if (!plan.isClosed && plan.closingTime && isAfter(now, parseISO(plan.closingTime))) {
+          try {
+            await setDoc(doc(db, 'plans', plan.id), { ...plan, isClosed: true }, { merge: true });
+            console.log(`Auto-closed plan: ${plan.name}`);
+            if (tgSettings.notifyPlanClose) {
+              await sendPlanCloseNotification(plan.id, false);
+            }
+          } catch (e) {
+            console.error('Auto close plan failed:', e);
+          }
+        }
+      }
+    }, 10000); // Check every 10 seconds
+
+    return () => clearInterval(interval);
+  }, [plans, tgSettings, user, isSuperAdmin, adminUsers]);
 
   // Cleanup old plans: Dining Date + 1 day at 20:00
   useEffect(() => {
@@ -649,6 +697,75 @@ function AppContent() {
 
   const handleLogout = () => signOut(auth);
 
+  const sendTelegramMessage = async (text: string) => {
+    if (!tgSettings.botToken || !tgSettings.chatId) return;
+    try {
+      await fetch(`https://api.telegram.org/bot${tgSettings.botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: tgSettings.chatId,
+          text: text,
+          parse_mode: 'HTML',
+          disable_web_page_preview: true
+        })
+      });
+    } catch (error) {
+      console.error('Error sending Telegram message:', error);
+    }
+  };
+
+  const sendPlanCloseNotification = async (planId: string, isManual: boolean = false) => {
+    const plan = plans.find(p => p.id === planId);
+    if (!plan) return;
+    
+    if (!isManual && !tgSettings.notifyPlanClose) return;
+
+    if (!tgSettings.botToken || !tgSettings.chatId) {
+      if (isManual) alert('發送失敗：請先至設定填寫 Telegram Bot Token 與 Chat ID');
+      return;
+    }
+
+    const store = stores.find(s => s.id === plan.storeId);
+    const planOrders = orders.filter(o => o.planId === plan.id);
+    
+    const dishSummary: { [dishId: string]: { name: string, price: number, totalQuantity: number, users: string[] } } = {};
+    planOrders.forEach(o => {
+      const d = dishes.find(dd => dd.id === o.dishId);
+      if (d) {
+        if (!dishSummary[d.id]) {
+          dishSummary[d.id] = { name: d.name, price: d.price, totalQuantity: 0, users: [] };
+        }
+        dishSummary[d.id].totalQuantity += o.quantity;
+        dishSummary[d.id].users.push(`${o.userName}(${o.quantity})`);
+      }
+    });
+
+    const sortedDishes = Object.values(dishSummary).sort((a, b) => b.price - a.price);
+    let summaryA = sortedDishes.map(d => `$${d.price} ${d.name} x ${d.totalQuantity}`).join('\n');
+    let totalQ = sortedDishes.reduce((sum, d) => sum + d.totalQuantity, 0);
+    summaryA += `\n總數量：${totalQ} 份`;
+
+    let summaryB = sortedDishes.map(d => `* ${d.name} (${d.totalQuantity}): ${d.users.join(', ')}`).join('\n');
+
+    const text = `🛑 <b>結單通知</b>
+
+<b>方案名:</b> ${plan.name}
+<b>店家:</b> ${store?.name || '未知'}
+<b>用餐日期:</b> ${plan.diningDate}
+
+====================
+<b>📊 明細彙整:</b>
+
+<b>【A區 - 報單用】</b>
+${summaryA}
+
+<b>【B區 - 取餐比對用】</b>
+${summaryB}`;
+
+    await sendTelegramMessage(text);
+  };
+
   const handleOrder = async () => {
     const q = Number(quantity);
     if (!selectedPlan || !selectedDish || !userName || isNaN(q) || q < 1) return;
@@ -670,6 +787,70 @@ function AppContent() {
         const orderRef = doc(collection(db, 'orders'));
         const id = orderRef.id;
         await setDoc(orderRef, { ...orderData, id });
+        
+        // Notify new order
+        if (tgSettings.notifyNewOrder) {
+          const store = stores.find(s => s.id === selectedPlan.storeId);
+          // Get all orders for this plan, append the new one for calculating summary
+          const planOrders = orders.filter(o => o.planId === selectedPlan.id);
+          const allOrdersForPlan = [...planOrders, { ...orderData, id } as Order];
+          
+          let existingOrdersText = planOrders.map(o => {
+            const d = dishes.find(dd => dd.id === o.dishId);
+            return `${o.userName}: ${d?.name || '未知菜色'} x${o.quantity}`;
+          }).join('\n');
+          
+          if (!existingOrdersText) existingOrdersText = '尚無其他訂單';
+
+          // Group by dish for summary
+          const dishSummary: { [dishId: string]: { name: string, price: number, totalQuantity: number, users: string[] } } = {};
+          allOrdersForPlan.forEach(o => {
+            const d = dishes.find(dd => dd.id === o.dishId);
+            if (d) {
+              if (!dishSummary[d.id]) {
+                dishSummary[d.id] = { name: d.name, price: d.price, totalQuantity: 0, users: [] };
+              }
+              dishSummary[d.id].totalQuantity += o.quantity;
+              dishSummary[d.id].users.push(`${o.userName}(${o.quantity})`);
+            }
+          });
+
+          // A區 - 報單用
+          const sortedDishes = Object.values(dishSummary).sort((a, b) => b.price - a.price);
+          let summaryA = sortedDishes.map(d => `$${d.price} ${d.name} x ${d.totalQuantity}`).join('\n');
+          let totalQ = sortedDishes.reduce((sum, d) => sum + d.totalQuantity, 0);
+          summaryA += `\n總數量：${totalQ} 份`;
+
+          // B區 - 取餐比對用
+          let summaryB = sortedDishes.map(d => `* ${d.name} (${d.totalQuantity}): ${d.users.join(', ')}`).join('\n');
+
+          const newOrderDish = dishes.find(d => d.id === selectedDish.id)?.name || '未知菜色';
+
+          const text = `🔔 <b>下單通知</b>
+
+<b>方案名:</b> ${selectedPlan.name}
+<b>店家:</b> ${store?.name || '未知'}
+<b>用餐日期:</b> ${selectedPlan.diningDate}
+<b>截止時間:</b> ${selectedPlan.closingTime.replace('T', ' ')}
+
+<b>🆕 新訂單:</b>
+${userName} - ${newOrderDish} x${q}
+
+====================
+<b>📜 原有訂單:</b>
+${existingOrdersText}
+
+====================
+<b>📊 明細彙整:</b>
+
+<b>【A區 - 報單用】</b>
+${summaryA}
+
+<b>【B區 - 取餐比對用】</b>
+${summaryB}`;
+
+          sendTelegramMessage(text);
+        }
       }
       
       setOrderSuccess(true);
@@ -752,6 +933,21 @@ function AppContent() {
       console.error(e);
       alert('刪除管理員失敗: ' + (e as Error).message);
     }
+  };
+
+  const updateTgSettings = async () => {
+    try {
+      await setDoc(doc(db, 'settings', 'telegram'), tgSettings);
+      alert('Telegram 通知設定已儲存');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'settings');
+    }
+  };
+
+  const testTgNotification = () => {
+    const text = '🎉 <b>測試通知</b>\n\n這是一則來自訂單系統的測試通知，如果您收到這則訊息，表示 Telegram 通知設定正確！';
+    sendTelegramMessage(text);
+    alert('已送出測試通知，請檢查您的 Telegram');
   };
 
   const addStore = async () => {
@@ -969,6 +1165,13 @@ function AppContent() {
     const id = planRef.id;
     try {
       await setDoc(planRef, { id, ...newPlan });
+      
+      const store = stores.find(s => s.id === newPlan.storeId);
+      if (tgSettings.notifyNewPlan) {
+        const text = `📢 <b>新方案開團通知</b>\n\n方案名: ${newPlan.name}\n店家: ${store?.name || '未知'}\n用餐日期: ${newPlan.diningDate}\n截止時間: ${newPlan.closingTime.replace('T', ' ')}\n\n🔗 前往訂單系統：\nhttps://s-bbanto.vercel.app/`;
+        sendTelegramMessage(text);
+      }
+
       setNewPlan({ name: '', storeId: '', diningDate: '', closingTime: '' });
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, 'plans');
@@ -1118,7 +1321,7 @@ function AppContent() {
                   </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {plans.filter(p => isAfter(parseISO(p.closingTime), new Date())).map(plan => {
+                  {plans.filter(p => !p.isClosed && isAfter(parseISO(p.closingTime), new Date())).map(plan => {
                     const store = stores.find(s => s.id === plan.storeId);
                     return (
                       <motion.div 
@@ -1163,7 +1366,7 @@ function AppContent() {
                       </motion.div>
                     );
                   })}
-                  {plans.filter(p => isAfter(parseISO(p.closingTime), new Date())).length === 0 && (
+                  {plans.filter(p => !p.isClosed && isAfter(parseISO(p.closingTime), new Date())).length === 0 && (
                     <div className="col-span-full py-20 text-center space-y-4">
                       <div className="w-16 h-16 bg-zinc-100 rounded-full flex items-center justify-center mx-auto">
                         <Utensils className="w-8 h-8 text-zinc-300" />
@@ -1540,21 +1743,47 @@ function AppContent() {
                           <th className="py-3 px-4 font-bold">店家</th>
                           <th className="py-3 px-4 font-bold">用餐日期</th>
                           <th className="py-3 px-4 font-bold">截止時間</th>
+                          <th className="py-3 px-4 font-bold">狀態</th>
                           <th className="py-3 px-4 font-bold">操作</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-50">
-                        {plans.map(plan => (
+                        {plans.map(plan => {
+                          const isPlanClosed = plan.isClosed || isAfter(new Date(), parseISO(plan.closingTime));
+                          return (
                           <tr key={plan.id} className="hover:bg-zinc-50/50 transition-colors">
                             <td className="py-4 px-4 font-bold">{plan.name}</td>
                             <td className="py-4 px-4 text-zinc-600">{stores.find(s => s.id === plan.storeId)?.name}</td>
                             <td className="py-4 px-4 text-zinc-600">{plan.diningDate}</td>
                             <td className="py-4 px-4 text-zinc-600">{format(parseISO(plan.closingTime), 'yyyy/MM/dd HH:mm')}</td>
                             <td className="py-4 px-4">
+                              {isPlanClosed ? (
+                                <span className="text-xs bg-zinc-100 text-zinc-500 px-2 py-1 rounded-full font-bold">已結單</span>
+                              ) : (
+                                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold">進行中</span>
+                              )}
+                            </td>
+                            <td className="py-4 px-4 flex items-center gap-3">
+                              {!isPlanClosed && (
+                                <button 
+                                  onClick={async () => {
+                                    if (confirm(`確定要提早結束「${plan.name}」嗎？`)) {
+                                      await setDoc(doc(db, 'plans', plan.id), { ...plan, isClosed: true }, { merge: true });
+                                      if (tgSettings.notifyPlanClose) {
+                                        await sendPlanCloseNotification(plan.id, false); // False means auto configuration is respected
+                                      }
+                                      alert('方案已結單！');
+                                    }
+                                  }} 
+                                  className="text-xs text-orange-600 hover:text-orange-700 font-bold bg-orange-50 px-2 py-1 rounded-md"
+                                >
+                                  結單
+                                </button>
+                              )}
                               <button onClick={() => setConfirmDelete({ col: 'plans', id: plan.id })} className="text-zinc-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                             </td>
                           </tr>
-                        ))}
+                        )})}
                       </tbody>
                     </table>
                   </div>
@@ -1855,14 +2084,28 @@ function AppContent() {
                               </div>
                             </div>
                             
-                            {/* Dish Summary Cards */}
-                            <div className="flex flex-wrap gap-2">
-                              {Object.values(dishSummary).map((item, idx) => (
-                                <div key={idx} className="bg-orange-50 text-orange-700 px-3 py-1.5 rounded-lg text-sm font-bold border border-orange-100 flex items-center gap-2">
-                                  <span>{item.name}</span>
-                                  <span className="bg-orange-600 text-white px-1.5 py-0.5 rounded text-[10px] min-w-[20px] text-center">{item.count}</span>
-                                </div>
-                              ))}
+                            <div className="flex flex-col md:items-end gap-3">
+                              {/* Dish Summary Cards */}
+                              <div className="flex flex-wrap gap-2 justify-start md:justify-end">
+                                {Object.values(dishSummary).map((item, idx) => (
+                                  <div key={idx} className="bg-orange-50 text-orange-700 px-3 py-1.5 rounded-lg text-sm font-bold border border-orange-100 flex items-center gap-2">
+                                    <span>{item.name}</span>
+                                    <span className="bg-orange-600 text-white px-1.5 py-0.5 rounded text-[10px] min-w-[20px] text-center">{item.count}</span>
+                                  </div>
+                                ))}
+                              </div>
+                              <Button 
+                                variant="outline"
+                                onClick={async () => {
+                                  if (confirm(`確定要發送「${plan.name}」的結單通知到 Telegram 嗎？`)) {
+                                    await sendPlanCloseNotification(plan.id, true);
+                                    alert('已觸發發送結單通知！');
+                                  }
+                                }}
+                                className="text-blue-600 border-blue-200 hover:bg-blue-50 text-xs py-1.5"
+                              >
+                                發送結單通知
+                              </Button>
                             </div>
                           </div>
 
@@ -2066,6 +2309,70 @@ function AppContent() {
                       )}
                     </div>
                   </div>
+
+                  {isSuperAdmin && (
+                    <div className="bg-blue-50/50 p-6 rounded-2xl border border-blue-100 space-y-4 mt-8">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold text-blue-900 flex items-center gap-2">
+                          <Smartphone className="w-5 h-5 text-blue-600" />
+                          Telegram 通知設定 (僅超級管理員可見)
+                        </h4>
+                        <Button variant="outline" onClick={testTgNotification} className="text-blue-700 border-blue-200 hover:bg-blue-100">
+                          測試通知
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Input 
+                          label="Bot Token" 
+                          value={tgSettings.botToken} 
+                          onChange={v => setTgSettings({ ...tgSettings, botToken: v })} 
+                          placeholder="請輸入 Bot Token" 
+                          type="password"
+                        />
+                        <Input 
+                          label="Chat ID" 
+                          value={tgSettings.chatId} 
+                          onChange={v => setTgSettings({ ...tgSettings, chatId: v })} 
+                          placeholder="請輸入 Chat ID" 
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-blue-800 ml-1">啟用通知項目</label>
+                        <div className="flex flex-wrap gap-4 bg-white/60 p-4 rounded-xl border border-blue-100">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={tgSettings.notifyNewPlan}
+                              onChange={e => setTgSettings({ ...tgSettings, notifyNewPlan: e.target.checked })}
+                              className="w-4 h-4 text-blue-600 rounded border-blue-300 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-blue-900">新方案開團通知</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={tgSettings.notifyNewOrder}
+                              onChange={e => setTgSettings({ ...tgSettings, notifyNewOrder: e.target.checked })}
+                              className="w-4 h-4 text-blue-600 rounded border-blue-300 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-blue-900">下單通知</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={tgSettings.notifyPlanClose}
+                              onChange={e => setTgSettings({ ...tgSettings, notifyPlanClose: e.target.checked })}
+                              className="w-4 h-4 text-blue-600 rounded border-blue-300 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-blue-900">結單通知</span>
+                          </label>
+                        </div>
+                      </div>
+                      <Button onClick={updateTgSettings} className="w-full bg-blue-600 hover:bg-blue-700 text-white border-0">
+                        儲存 TG 設定
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </Card>

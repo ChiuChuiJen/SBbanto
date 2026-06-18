@@ -112,5 +112,10 @@ service cloud.firestore {
       allow read: if isSuperAdmin() || (isAuthenticated() && request.auth.uid == userId);
       allow write: if isSuperAdmin();
     }
+
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
   }
 }
