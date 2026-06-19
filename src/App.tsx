@@ -56,7 +56,7 @@ import {
   User as FirebaseUser
 } from 'firebase/auth';
 import { db, auth, secondaryAuth } from './firebase';
-import { APP_VERSION } from './constants';
+import { APP_VERSION, VERSION_HISTORY } from './constants';
 
 // --- Utilities ---
 function cn(...inputs: ClassValue[]) {
@@ -492,6 +492,7 @@ function AppContent() {
   const [announcementEdit, setAnnouncementEdit] = useState({ content: '', isActive: false });
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [reportText, setReportText] = useState('');
   const [reportPlanId, setReportPlanId] = useState<string | null>(null);
   const [showShortcutModal, setShowShortcutModal] = useState(false);
@@ -750,7 +751,8 @@ function AppContent() {
     const sortedDishes = Object.values(dishSummary).sort((a, b) => b.price - a.price);
     let summaryA = sortedDishes.map(d => `$${d.price} ${d.name} x ${d.totalQuantity}`).join('\n');
     let totalQ = sortedDishes.reduce((sum, d) => sum + d.totalQuantity, 0);
-    summaryA += `\n總數量：${totalQ} 份`;
+    let totalAmount = sortedDishes.reduce((sum, d) => sum + d.price * d.totalQuantity, 0);
+    summaryA += `\n總數量：${totalQ} 份\n總金額：$${totalAmount}`;
 
     let summaryB = sortedDishes.map(d => `* ${d.name} (${d.totalQuantity}): ${d.users.join(', ')}`).join('\n');
 
@@ -864,7 +866,8 @@ ${reportText}`;
           const sortedDishes = Object.values(dishSummary).sort((a, b) => b.price - a.price);
           let summaryA = sortedDishes.map(d => `$${d.price} ${d.name} x ${d.totalQuantity}`).join('\n');
           let totalQ = sortedDishes.reduce((sum, d) => sum + d.totalQuantity, 0);
-          summaryA += `\n總數量：${totalQ} 份`;
+          let totalAmount = sortedDishes.reduce((sum, d) => sum + d.price * d.totalQuantity, 0);
+          summaryA += `\n總數量：${totalQ} 份\n總金額：$${totalAmount}`;
 
           // B區 - 取餐比對用
           let summaryB = sortedDishes.map(d => `* ${d.name} (${d.totalQuantity}): ${d.users.join(', ')}`).join('\n');
@@ -2665,6 +2668,56 @@ ${summaryB}`;
         )}
       </AnimatePresence>
 
+      {/* Version History Modal */}
+      <AnimatePresence>
+        {showVersionHistory && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-zinc-900/40 backdrop-blur-sm"
+              onClick={() => setShowVersionHistory(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 max-h-[80vh] flex flex-col"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold flex items-center gap-2">
+                  <Globe className="w-5 h-5 text-orange-600" />
+                  版本歷史紀錄
+                </h3>
+                <button onClick={() => setShowVersionHistory(false)} className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-500">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="overflow-y-auto pr-2 space-y-6">
+                {VERSION_HISTORY.map((v, idx) => (
+                  <div key={idx} className="relative pl-4 border-l-2 border-orange-100/50 pb-2">
+                    <div className="absolute w-3 h-3 bg-orange-500 rounded-full -left-[7px] top-1.5 shadow-[0_0_0_4px_white]"></div>
+                    <div className="flex items-baseline gap-2 mb-2">
+                      <span className="font-bold text-orange-600 font-mono">{v.version}</span>
+                      <span className="text-xs text-zinc-400 font-mono">{v.date}</span>
+                    </div>
+                    <ul className="space-y-1.5">
+                      {v.notes.map((note, noteIdx) => (
+                        <li key={noteIdx} className="text-sm text-zinc-600 flex items-start gap-2">
+                          <span className="text-orange-400 mt-1">•</span>
+                          <span>{note}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Report Modal */}
       <AnimatePresence>
         {showReportModal && (
@@ -2916,9 +2969,12 @@ ${summaryB}`;
           <Smartphone className="w-3.5 h-3.5" />
           捷徑設置
         </button>
-        <div className="text-[10px] font-mono text-zinc-400 bg-white/50 backdrop-blur-sm px-2 py-1 rounded-md border border-zinc-100 pointer-events-none">
+        <button 
+          onClick={() => setShowVersionHistory(true)}
+          className="text-[10px] font-mono text-zinc-400 bg-white/50 backdrop-blur-sm px-2 py-1 rounded-md border border-zinc-100 cursor-pointer hover:bg-white/80 hover:text-zinc-600 transition-colors"
+        >
           {APP_VERSION}
-        </div>
+        </button>
       </div>
     </div>
   );
