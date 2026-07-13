@@ -509,6 +509,7 @@ function AppContent() {
   const [announcementEdit, setAnnouncementEdit] = useState({ content: '', isActive: false });
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [reportText, setReportText] = useState('');
   const [reportPlanId, setReportPlanId] = useState<string | null>(null);
@@ -1463,9 +1464,31 @@ ${summaryB}`;
             {userTab === 'plans' ? (
               !selectedPlan ? (
                 <div className="space-y-6">
-                  <div className="flex flex-col gap-1">
-                    <h2 className="text-2xl font-bold">{t('activePlans')}</h2>
-                    <p className="text-zinc-500">{t('selectPlan')}</p>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
+                    <div className="flex flex-col gap-1">
+                      <h2 className="text-2xl font-bold">{t('activePlans')}</h2>
+                      <p className="text-zinc-500">{t('selectPlan')}</p>
+                    </div>
+                    <div className="flex items-center gap-3 bg-green-50 px-4 py-2 rounded-xl border border-green-100">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-green-800">加入 假日就是要訂便當 官方帳號</span>
+                        <span className="text-sm font-mono font-medium text-green-700">@wgv5467p</span>
+                      </div>
+                      <div 
+                        className="w-10 h-10 bg-white rounded-md flex items-center justify-center cursor-pointer hover:scale-105 transition-transform shadow-sm overflow-hidden border border-green-200"
+                        onClick={() => setShowQrModal(true)}
+                      >
+                        <img 
+                          src="/qr.png" 
+                          alt="QR Code" 
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="%2316a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 7h.01"/><path d="M17 7h.01"/><path d="M7 17h.01"/><path d="M17 17h.01"/><path d="M12 12h.01"/><path d="M12 17h.01"/><path d="M17 12h.01"/><path d="M7 12h.01"/></svg>';
+                            e.currentTarget.className = "w-6 h-6";
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2812,6 +2835,54 @@ ${summaryB}`;
                 >
                   確定刪除
                 </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* QR Code Modal */}
+      <AnimatePresence>
+        {showQrModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-zinc-900/40 backdrop-blur-sm"
+              onClick={() => setShowQrModal(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden flex flex-col border border-zinc-100"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center p-6 pb-4 border-b border-zinc-100">
+                <h3 className="text-xl font-bold flex items-center gap-2">
+                  <span className="text-green-600 font-bold">加入 LINE 官方帳號</span>
+                </h3>
+                <button onClick={() => setShowQrModal(false)} className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-500">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6 flex flex-col items-center justify-center bg-zinc-50">
+                <div className="w-full aspect-square bg-white rounded-2xl p-4 shadow-sm border border-zinc-200 flex items-center justify-center mb-6">
+                  <img 
+                    src="/qr.png" 
+                    alt="LINE QR Code" 
+                    className="w-full h-full object-contain"
+                    onError={(e) => {
+                      e.currentTarget.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="%2316a34a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 7h.01"/><path d="M17 7h.01"/><path d="M7 17h.01"/><path d="M17 17h.01"/><path d="M12 12h.01"/><path d="M12 17h.01"/><path d="M17 12h.01"/><path d="M7 12h.01"/></svg>';
+                      e.currentTarget.className = "w-24 h-24";
+                    }}
+                  />
+                </div>
+                <div className="text-center space-y-1">
+                  <p className="text-sm text-zinc-500 font-medium">LINE ID</p>
+                  <p className="text-2xl font-mono font-bold tracking-tight text-green-700">@wgv5467p</p>
+                </div>
               </div>
             </motion.div>
           </div>
