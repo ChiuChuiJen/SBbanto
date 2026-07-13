@@ -114,6 +114,15 @@ interface TgSettings {
   notifyReport: boolean;
 }
 
+interface LineSettings {
+  channelAccessToken: string;
+  userId: string;
+  notifyNewPlan: boolean;
+  notifyNewOrder: boolean;
+  notifyPlanClose: boolean;
+  notifyReport: boolean;
+}
+
 // --- Components ---
 
 const Button = ({ 
@@ -458,6 +467,14 @@ function AppContent() {
     notifyPlanClose: false,
     notifyReport: false
   });
+  const [lineSettings, setLineSettings] = useState<LineSettings>({
+    channelAccessToken: '',
+    userId: '',
+    notifyNewPlan: false,
+    notifyNewOrder: false,
+    notifyPlanClose: false,
+    notifyReport: false
+  });
   const [showAnnouncement, setShowAnnouncement] = useState(false);
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState<{ col: string, id: string } | null>(null);
@@ -570,6 +587,12 @@ function AppContent() {
       }
     }, (error) => handleFirestoreError(error, OperationType.GET, 'settings'));
 
+    const unsubLineSettings = onSnapshot(doc(db, 'settings', 'line'), (snapshot) => {
+      if (snapshot.exists()) {
+        setLineSettings(snapshot.data() as LineSettings);
+      }
+    }, (error) => handleFirestoreError(error, OperationType.GET, 'settings'));
+
     let unsubAdminUsers = () => {};
     if (isSuperAdmin) {
       unsubAdminUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
@@ -592,6 +615,7 @@ function AppContent() {
       unsubOrders();
       unsubAnnounce();
       unsubTgSettings();
+      unsubLineSettings();
       unsubAdminUsers();
     };
   }, [user, isSuperAdmin]);
@@ -722,14 +746,34 @@ function AppContent() {
     }
   };
 
+  const sendLineMessage = async (text: string) => {
+    if (!lineSettings.channelAccessToken || !lineSettings.userId) return;
+    try {
+      // Clean HTML tags for LINE as it doesn't support HTML formatting like Telegram
+      const plainText = text.replace(/<b>(.*?)<\/b>/g, '$1').replace(/<a.*?>/g, '').replace(/<\/a>/g, '');
+      
+      await fetch('/api/line-notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channelAccessToken: lineSettings.channelAccessToken,
+          userId: lineSettings.userId,
+          message: plainText
+        })
+      });
+    } catch (error) {
+      console.error('Error sending LINE message:', error);
+    }
+  };
+
   const sendPlanCloseNotification = async (planId: string, isManual: boolean = false) => {
     const plan = plans.find(p => p.id === planId);
     if (!plan) return;
     
-    if (!isManual && !tgSettings.notifyPlanClose) return;
+    if (!isManual && !tgSettings.notifyPlanClose && !lineSettings.notifyPlanClose) return;
 
-    if (!tgSettings.botToken || !tgSettings.chatId) {
-      if (isManual) alert('發送失敗：請先至設定填寫 Telegram Bot Token 與 Chat ID');
+    if (isManual && (!tgSettings.botToken || !tgSettings.chatId) && (!lineSettings.channelAccessToken || !lineSettings.userId)) {
+      alert('發送失敗：請先至設定填寫 Telegram 或 Line 的相關金鑰');
       return;
     }
 
@@ -771,12 +815,17 @@ ${summaryA}
 <b>【B區 - 取餐比對用】</b>
 ${summaryB}`;
 
-    await sendTelegramMessage(text);
+    if (isManual || tgSettings.notifyPlanClose) {
+      await sendTelegramMessage(text);
+    }
+    if (isManual || lineSettings.notifyPlanClose) {
+      await sendLineMessage(text);
+    }
   };
 
   const submitReport = async () => {
     if (!reportText.trim()) return;
-    if (!tgSettings.notifyReport) {
+    if (!tgSettings.notifyReport && !lineSettings.notifyReport) {
       alert('管理員未啟用回報通知功能。');
       return;
     }
@@ -806,7 +855,12 @@ ${reportText}`;
 ${reportText}`;
     }
 
-    await sendTelegramMessage(text);
+    if (tgSettings.notifyReport) {
+      await sendTelegramMessage(text);
+    }
+    if (lineSettings.notifyReport) {
+      await sendLineMessage(text);
+    }
     alert('已成功發送您的回報！');
     setShowReportModal(false);
     setReportText('');
@@ -836,7 +890,7 @@ ${reportText}`;
         await setDoc(orderRef, { ...orderData, id });
         
         // Notify new order
-        if (tgSettings.notifyNewOrder) {
+        if (tgSettings.notifyNewOrder || lineSettings.notifyNewOrder) {
           const store = stores.find(s => s.id === selectedPlan.storeId);
           // Get all orders for this plan, append the new one for calculating summary
           const planOrders = orders.filter(o => o.planId === selectedPlan.id);
@@ -897,7 +951,12 @@ ${summaryA}
 <b>【B區 - 取餐比對用】</b>
 ${summaryB}`;
 
-          sendTelegramMessage(text);
+          if (tgSettings.notifyNewOrder) {
+            sendTelegramMessage(text);
+          }
+          if (lineSettings.notifyNewOrder) {
+            sendLineMessage(text);
+          }
         }
       }
       
@@ -996,6 +1055,21 @@ ${summaryB}`;
     const text = '🎉 <b>測試通知</b>\n\n這是一則來自訂單系統的測試通知，如果您收到這則訊息，表示 Telegram 通知設定正確！';
     sendTelegramMessage(text);
     alert('已送出測試通知，請檢查您的 Telegram');
+  };
+
+  const updateLineSettings = async () => {
+    try {
+      await setDoc(doc(db, 'settings', 'line'), lineSettings);
+      alert('Line 通知設定已儲存');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'settings');
+    }
+  };
+
+  const testLineNotification = () => {
+    const text = '🎉 測試通知\n\n這是一則來自訂單系統的測試通知，如果您收到這則訊息，表示 Line 通知設定正確！';
+    sendLineMessage(text);
+    alert('已送出測試通知，請檢查您的 Line');
   };
 
   const addStore = async () => {
@@ -1215,9 +1289,12 @@ ${summaryB}`;
       await setDoc(planRef, { id, ...newPlan });
       
       const store = stores.find(s => s.id === newPlan.storeId);
+      const text = `📢 <b>新方案開團通知</b>\n\n方案名: ${newPlan.name}\n店家: ${store?.name || '未知'}\n用餐日期: ${newPlan.diningDate}\n截止時間: ${newPlan.closingTime.replace('T', ' ')}\n\n🔗 前往訂單系統：\nhttps://s-bbanto.vercel.app/`;
       if (tgSettings.notifyNewPlan) {
-        const text = `📢 <b>新方案開團通知</b>\n\n方案名: ${newPlan.name}\n店家: ${store?.name || '未知'}\n用餐日期: ${newPlan.diningDate}\n截止時間: ${newPlan.closingTime.replace('T', ' ')}\n\n🔗 前往訂單系統：\nhttps://s-bbanto.vercel.app/`;
         sendTelegramMessage(text);
+      }
+      if (lineSettings.notifyNewPlan) {
+        sendLineMessage(text);
       }
 
       setNewPlan({ name: '', storeId: '', diningDate: '', closingTime: '' });
@@ -2463,6 +2540,79 @@ ${summaryB}`;
                       </div>
                       <Button onClick={updateTgSettings} className="w-full bg-blue-600 hover:bg-blue-700 text-white border-0">
                         儲存 TG 設定
+                      </Button>
+                    </div>
+                  )}
+
+                  {isSuperAdmin && (
+                    <div className="bg-green-50/50 p-6 rounded-2xl border border-green-100 space-y-4 mt-8">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold text-green-900 flex items-center gap-2">
+                          <Smartphone className="w-5 h-5 text-green-600" />
+                          Line 通知設定 (僅超級管理員可見)
+                        </h4>
+                        <Button variant="outline" onClick={testLineNotification} className="text-green-700 border-green-200 hover:bg-green-100">
+                          測試通知
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Input 
+                          label="Channel Access Token" 
+                          value={lineSettings.channelAccessToken || ''} 
+                          onChange={v => setLineSettings({ ...lineSettings, channelAccessToken: v })} 
+                          placeholder="請輸入 Channel Access Token" 
+                          type="password"
+                        />
+                        <Input 
+                          label="User ID / Group ID" 
+                          value={lineSettings.userId || ''} 
+                          onChange={v => setLineSettings({ ...lineSettings, userId: v })} 
+                          placeholder="請輸入 User ID 或 Group ID" 
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-green-800 ml-1">啟用通知項目</label>
+                        <div className="flex flex-wrap gap-4 bg-white/60 p-4 rounded-xl border border-green-100">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={!!lineSettings.notifyNewPlan}
+                              onChange={e => setLineSettings({ ...lineSettings, notifyNewPlan: e.target.checked })}
+                              className="w-4 h-4 text-green-600 rounded border-green-300 focus:ring-green-500"
+                            />
+                            <span className="text-sm text-green-900">新方案開團通知</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={!!lineSettings.notifyNewOrder}
+                              onChange={e => setLineSettings({ ...lineSettings, notifyNewOrder: e.target.checked })}
+                              className="w-4 h-4 text-green-600 rounded border-green-300 focus:ring-green-500"
+                            />
+                            <span className="text-sm text-green-900">下單通知</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={!!lineSettings.notifyPlanClose}
+                              onChange={e => setLineSettings({ ...lineSettings, notifyPlanClose: e.target.checked })}
+                              className="w-4 h-4 text-green-600 rounded border-green-300 focus:ring-green-500"
+                            />
+                            <span className="text-sm text-green-900">結單通知</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={!!lineSettings.notifyReport}
+                              onChange={e => setLineSettings({ ...lineSettings, notifyReport: e.target.checked })}
+                              className="w-4 h-4 text-green-600 rounded border-green-300 focus:ring-green-500"
+                            />
+                            <span className="text-sm text-green-900">回報通知</span>
+                          </label>
+                        </div>
+                      </div>
+                      <Button onClick={updateLineSettings} className="w-full bg-green-600 hover:bg-green-700 text-white border-0">
+                        儲存 Line 設定
                       </Button>
                     </div>
                   )}
