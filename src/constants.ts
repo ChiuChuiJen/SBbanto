@@ -1,6 +1,7 @@
-export const APP_VERSION = "V1.5.5";
+export const APP_VERSION = "V1.5.6";
 
 export const VERSION_HISTORY = [
+  { version: 'V1.5.6', date: '2026-07-13', notes: ['修復自動結單通知中，訂單明細數量與總額為 0 的問題'] },
   { version: 'V1.5.5', date: '2026-07-13', notes: ['更新 Line 群組加入連結與 QR Code 顯示'] },
   { version: 'V1.5.4', date: '2026-07-13', notes: ['新增 Line 通知功能 (支援 Messaging API)'] },
   { version: 'V1.5.3', date: '2026-06-18', notes: ['新增點擊版本號查看歷史紀錄', 'Telegram機器人通知A區明細加入總金額'] },

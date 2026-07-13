@@ -634,7 +634,7 @@ function AppContent() {
           try {
             await setDoc(doc(db, 'plans', plan.id), { ...plan, isClosed: true }, { merge: true });
             console.log(`Auto-closed plan: ${plan.name}`);
-            if (tgSettings.notifyPlanClose) {
+            if (tgSettings.notifyPlanClose || lineSettings.notifyPlanClose) {
               await sendPlanCloseNotification(plan.id, false);
             }
           } catch (e) {
@@ -645,7 +645,7 @@ function AppContent() {
     }, 10000); // Check every 10 seconds
 
     return () => clearInterval(interval);
-  }, [plans, tgSettings, user, isSuperAdmin, adminUsers]);
+  }, [plans, tgSettings, lineSettings, user, isSuperAdmin, adminUsers]);
 
   // Cleanup old plans: Dining Date + 1 day at 20:00
   useEffect(() => {
@@ -779,7 +779,16 @@ function AppContent() {
     }
 
     const store = stores.find(s => s.id === plan.storeId);
-    const planOrders = orders.filter(o => o.planId === plan.id);
+    
+    // Fetch latest orders directly from Firestore to avoid closure issues in intervals
+    let planOrders: Order[] = [];
+    try {
+      const ordersSnapshot = await getDocs(query(collection(db, 'orders'), where('planId', '==', plan.id)));
+      planOrders = ordersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+    } catch (e) {
+      console.error('Failed to fetch orders for notification:', e);
+      planOrders = orders.filter(o => o.planId === plan.id); // fallback
+    }
     
     const dishSummary: { [dishId: string]: { name: string, price: number, totalQuantity: number, users: string[] } } = {};
     planOrders.forEach(o => {
@@ -1954,7 +1963,7 @@ ${summaryB}`;
                                   onClick={async () => {
                                     if (confirm(`確定要提早結束「${plan.name}」嗎？`)) {
                                       await setDoc(doc(db, 'plans', plan.id), { ...plan, isClosed: true }, { merge: true });
-                                      if (tgSettings.notifyPlanClose) {
+                                      if (tgSettings.notifyPlanClose || lineSettings.notifyPlanClose) {
                                         await sendPlanCloseNotification(plan.id, false); // False means auto configuration is respected
                                       }
                                       alert('方案已結單！');
