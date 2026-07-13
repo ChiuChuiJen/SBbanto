@@ -1471,15 +1471,16 @@ ${summaryB}`;
                     </div>
                     <div className="flex items-center gap-3 bg-green-50 px-4 py-2 rounded-xl border border-green-100">
                       <div className="flex flex-col">
-                        <span className="text-xs font-bold text-green-800">加入 假日就是要訂便當 官方帳號</span>
-                        <span className="text-sm font-mono font-medium text-green-700">@wgv5467p</span>
+                        <span className="text-xs font-bold text-green-800">加入 假日就是要訂便當 群組</span>
+                        <span className="text-xs font-medium text-green-700">可在第一時間獲取訂餐資訊</span>
+                        <a href="https://line.me/ti/g/m3gcXBWuM3" target="_blank" rel="noreferrer" className="text-xs font-mono font-medium text-blue-600 hover:underline">https://line.me/ti/g/m3gcXBWuM3</a>
                       </div>
                       <div 
-                        className="w-10 h-10 bg-white rounded-md flex items-center justify-center cursor-pointer hover:scale-105 transition-transform shadow-sm overflow-hidden border border-green-200"
+                        className="w-10 h-10 bg-white rounded-md flex items-center justify-center cursor-pointer hover:scale-105 transition-transform shadow-sm overflow-hidden border border-green-200 shrink-0"
                         onClick={() => setShowQrModal(true)}
                       >
                         <img 
-                          src="/qr.png" 
+                          src="/qr.jpg" 
                           alt="QR Code" 
                           className="w-full h-full object-cover"
                           onError={(e) => {
@@ -2861,7 +2862,7 @@ ${summaryB}`;
             >
               <div className="flex justify-between items-center p-6 pb-4 border-b border-zinc-100">
                 <h3 className="text-xl font-bold flex items-center gap-2">
-                  <span className="text-green-600 font-bold">加入 LINE 官方帳號</span>
+                  <span className="text-green-600 font-bold">加入 LINE 群組</span>
                 </h3>
                 <button onClick={() => setShowQrModal(false)} className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-500">
                   <X className="w-5 h-5" />
@@ -2870,7 +2871,7 @@ ${summaryB}`;
               <div className="p-6 flex flex-col items-center justify-center bg-zinc-50">
                 <div className="w-full aspect-square bg-white rounded-2xl p-4 shadow-sm border border-zinc-200 flex items-center justify-center mb-6">
                   <img 
-                    src="/qr.png" 
+                    src="/qr.jpg" 
                     alt="LINE QR Code" 
                     className="w-full h-full object-contain"
                     onError={(e) => {
@@ -2880,8 +2881,8 @@ ${summaryB}`;
                   />
                 </div>
                 <div className="text-center space-y-1">
-                  <p className="text-sm text-zinc-500 font-medium">LINE ID</p>
-                  <p className="text-2xl font-mono font-bold tracking-tight text-green-700">@wgv5467p</p>
+                  <p className="text-sm text-zinc-500 font-medium">LINE 群組連結</p>
+                  <a href="https://line.me/ti/g/m3gcXBWuM3" target="_blank" rel="noreferrer" className="text-base sm:text-lg font-mono font-bold tracking-tight text-blue-600 hover:underline break-all block px-4">https://line.me/ti/g/m3gcXBWuM3</a>
                 </div>
               </div>
             </motion.div>
