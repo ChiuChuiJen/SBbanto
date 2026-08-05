@@ -1381,6 +1381,21 @@ ${summaryB}`;
             {/* Theme & Language Switchers */}
             <div className="flex items-center gap-2 mr-2">
               <button 
+                onClick={() => setShowVersionHistory(true)}
+                className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100/80 px-1.5 py-0.5 rounded hover:bg-zinc-200 hover:text-zinc-600 transition-colors mr-1 sm:mr-2"
+                title="版本歷史"
+              >
+                {APP_VERSION}
+              </button>
+              <button 
+                onClick={() => setShowShortcutModal(true)}
+                className="flex items-center gap-1.5 text-xs font-bold text-zinc-500 hover:text-orange-600 transition-colors mr-2"
+                title="捷徑設置"
+              >
+                <Smartphone className="w-4 h-4" />
+                <span className="hidden sm:inline">捷徑</span>
+              </button>
+              <button 
                 onClick={() => {
                   setReportPlanId(null);
                   setShowReportModal(true);
@@ -1389,7 +1404,7 @@ ${summaryB}`;
                 title="系統回報"
               >
                 <AlertCircle className="w-4 h-4" />
-                <span className="hidden sm:inline">系統回報</span>
+                <span className="hidden sm:inline">回報</span>
               </button>
               <select 
                 value={language} 
@@ -3191,22 +3206,6 @@ ${summaryB}`;
         )}
       </AnimatePresence>
 
-      {/* Shortcut Setup & Version Number */}
-      <div className="fixed bottom-4 right-4 flex flex-col items-end gap-2 z-40">
-        <button 
-          onClick={() => setShowShortcutModal(true)}
-          className="text-xs font-medium text-zinc-600 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-zinc-200 shadow-sm hover:bg-white transition-colors flex items-center gap-1.5"
-        >
-          <Smartphone className="w-3.5 h-3.5" />
-          捷徑設置
-        </button>
-        <button 
-          onClick={() => setShowVersionHistory(true)}
-          className="text-[10px] font-mono text-zinc-400 bg-white/50 backdrop-blur-sm px-2 py-1 rounded-md border border-zinc-100 cursor-pointer hover:bg-white/80 hover:text-zinc-600 transition-colors"
-        >
-          {APP_VERSION}
-        </button>
-      </div>
     </div>
   );
 }
