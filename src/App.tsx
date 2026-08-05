@@ -1357,100 +1357,107 @@ ${summaryB}`;
     <div className="min-h-screen transition-colors duration-300 font-sans bg-zinc-50 text-zinc-900">
       {/* Header */}
       <header className="border-b sticky top-0 z-10 transition-colors duration-300 backdrop-blur-md bg-white/80 border-zinc-200">
-        <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 cursor-pointer group" onClick={() => setView('user')}>
-            <img 
-              src="/logo.png" 
-              alt="Logo" 
-              className="w-10 h-10 object-cover rounded-xl shadow-lg shadow-orange-500/30 group-hover:scale-110 transition-transform bg-white"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-                if (e.currentTarget.nextElementSibling) {
-                  e.currentTarget.nextElementSibling.classList.remove('hidden');
-                  e.currentTarget.nextElementSibling.classList.add('flex');
-                }
-              }}
-            />
-            <div className="hidden w-10 h-10 bg-orange-600 rounded-xl items-center justify-center shadow-lg shadow-orange-500/30 group-hover:scale-110 transition-transform">
-              <ShoppingBag className="w-6 h-6 text-white" />
-            </div>
-            <span className="font-display font-black text-xl tracking-tight">{t('title')}</span>
-          </div>
-          
-          <div className="flex items-center gap-4">
-            {/* Theme & Language Switchers */}
-            <div className="flex items-center gap-2 mr-2">
-              <button 
-                onClick={() => setShowVersionHistory(true)}
-                className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100/80 px-1.5 py-0.5 rounded hover:bg-zinc-200 hover:text-zinc-600 transition-colors mr-1 sm:mr-2"
-                title="版本歷史"
-              >
-                {APP_VERSION}
-              </button>
-              <button 
-                onClick={() => setShowShortcutModal(true)}
-                className="flex items-center gap-1.5 text-xs font-bold text-zinc-500 hover:text-orange-600 transition-colors mr-2"
-                title="捷徑設置"
-              >
-                <Smartphone className="w-4 h-4" />
-                <span className="hidden sm:inline">捷徑</span>
-              </button>
-              <button 
-                onClick={() => {
-                  setReportPlanId(null);
-                  setShowReportModal(true);
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 cursor-pointer group" onClick={() => setView('user')}>
+              <img 
+                src="/logo.png" 
+                alt="Logo" 
+                className="w-9 h-9 sm:w-10 sm:h-10 object-cover rounded-xl shadow-lg shadow-orange-500/30 group-hover:scale-110 transition-transform bg-white"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  if (e.currentTarget.nextElementSibling) {
+                    e.currentTarget.nextElementSibling.classList.remove('hidden');
+                    e.currentTarget.nextElementSibling.classList.add('flex');
+                  }
                 }}
-                className="flex items-center gap-1.5 text-xs font-bold text-zinc-500 hover:text-orange-600 transition-colors mr-2"
-                title="系統回報"
-              >
-                <AlertCircle className="w-4 h-4" />
-                <span className="hidden sm:inline">回報</span>
-              </button>
-              <select 
-                value={language} 
-                onChange={(e) => setLanguage(e.target.value as any)}
-                className="bg-transparent text-xs font-bold border-none focus:ring-0 cursor-pointer"
-              >
-                <option value="zh">繁中</option>
-                <option value="en">EN</option>
-                <option value="vi">VN</option>
-              </select>
+              />
+              <div className="hidden w-9 h-9 sm:w-10 sm:h-10 bg-orange-600 rounded-xl items-center justify-center shadow-lg shadow-orange-500/30 group-hover:scale-110 transition-transform">
+                <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+              </div>
+              <span className="font-display font-black text-lg sm:text-xl tracking-tight">{t('title')}</span>
             </div>
+            
+            <div className="flex items-center gap-2 sm:gap-3">
+              {/* Theme & Language Switchers */}
+              <div className="flex items-center gap-1 sm:gap-2">
+                <button 
+                  onClick={() => {
+                    setReportPlanId(null);
+                    setShowReportModal(true);
+                  }}
+                  className="flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-orange-600 transition-colors px-1"
+                  title="系統回報"
+                >
+                  <AlertCircle className="w-4 h-4" />
+                  <span className="hidden sm:inline">回報</span>
+                </button>
+                <select 
+                  value={language} 
+                  onChange={(e) => setLanguage(e.target.value as any)}
+                  className="bg-transparent text-xs font-bold border-none focus:ring-0 cursor-pointer px-1 text-zinc-700"
+                >
+                  <option value="zh">繁中</option>
+                  <option value="en">EN</option>
+                  <option value="vi">VN</option>
+                </select>
+              </div>
 
-            {user ? (
-              <>
-                {isAdmin && (
-                  <button 
-                    onClick={() => setView(view === 'user' ? 'admin' : 'user')}
-                    className="flex items-center gap-2 text-sm font-medium text-zinc-600 -zinc-400 hover:text-orange-600 transition-colors"
-                  >
-                    {view === 'user' ? (
-                      <><Settings className="w-4 h-4" /> {t('adminBackend')}</>
-                    ) : (
-                      <><ArrowLeft className="w-4 h-4" /> {t('backToFront')}</>
-                    )}
-                  </button>
-                )}
-                <div className="flex items-center gap-3 pl-4 border-l border-zinc-200 -zinc-800">
-                  <div className="text-right hidden sm:block">
-                    <div className="text-xs font-bold">{user.displayName}</div>
-                    <div className="text-[10px] text-zinc-400">{user.email?.replace('@admin.local', '')}</div>
-                  </div>
-                  {user.photoURL ? (
-                    <img src={user.photoURL} className="w-8 h-8 rounded-full border border-zinc-100 -zinc-800" alt="" />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full border border-zinc-100 bg-zinc-100 flex items-center justify-center text-zinc-500 font-bold text-xs uppercase">
-                      {user.email?.replace('@admin.local', '')?.[0] || 'U'}
-                    </div>
+              {user ? (
+                <>
+                  {isAdmin && (
+                    <button 
+                      onClick={() => setView(view === 'user' ? 'admin' : 'user')}
+                      className="flex items-center gap-1.5 text-xs sm:text-sm font-medium text-zinc-600 hover:text-orange-600 transition-colors"
+                    >
+                      {view === 'user' ? (
+                        <><Settings className="w-4 h-4" /> <span className="hidden sm:inline">{t('adminBackend')}</span><span className="sm:hidden">後台</span></>
+                      ) : (
+                        <><ArrowLeft className="w-4 h-4" /> <span className="hidden sm:inline">{t('backToFront')}</span><span className="sm:hidden">前台</span></>
+                      )}
+                    </button>
                   )}
-                  <button onClick={handleLogout} className="text-zinc-400 hover:text-zinc-900 -white transition-colors"><LogOut className="w-4 h-4" /></button>
-                </div>
-              </>
-            ) : (
-              <Button onClick={() => setShowLoginModal(true)} variant="outline" className="text-sm">
-                <LogIn className="w-4 h-4" /> {t('login')}
-              </Button>
-            )}
+                  <div className="flex items-center gap-2 sm:gap-3 pl-2 sm:pl-4 border-l border-zinc-200">
+                    <div className="text-right hidden sm:block">
+                      <div className="text-xs font-bold">{user.displayName}</div>
+                      <div className="text-[10px] text-zinc-400">{user.email?.replace('@admin.local', '')}</div>
+                    </div>
+                    {user.photoURL ? (
+                      <img src={user.photoURL} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-zinc-100" alt="" />
+                    ) : (
+                      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-zinc-100 bg-zinc-100 flex items-center justify-center text-zinc-500 font-bold text-xs uppercase">
+                        {user.email?.replace('@admin.local', '')?.[0] || 'U'}
+                      </div>
+                    )}
+                    <button onClick={handleLogout} className="text-zinc-400 hover:text-zinc-900 transition-colors"><LogOut className="w-4 h-4" /></button>
+                  </div>
+                </>
+              ) : (
+                <Button onClick={() => setShowLoginModal(true)} variant="outline" className="text-xs sm:text-sm py-1.5 px-2.5 sm:px-3">
+                  <LogIn className="w-4 h-4" /> {t('login')}
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Sub Header Row for Shortcut Setup & Version */}
+          <div className="flex items-center justify-between text-xs border-t border-zinc-100/80 pt-1.5 mt-2 px-0.5">
+            <button 
+              onClick={() => setShowShortcutModal(true)}
+              className="flex items-center gap-1.5 text-xs font-medium text-zinc-600 hover:text-orange-600 transition-colors bg-zinc-100/80 hover:bg-zinc-200/80 px-2.5 py-1 rounded-full"
+              title="捷徑設置"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-orange-600" />
+              <span>捷徑設置</span>
+            </button>
+            
+            <button 
+              onClick={() => setShowVersionHistory(true)}
+              className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100/80 px-2 py-0.5 rounded hover:bg-zinc-200 hover:text-zinc-600 transition-colors"
+              title="版本歷史"
+            >
+              {APP_VERSION}
+            </button>
           </div>
         </div>
       </header>
