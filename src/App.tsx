@@ -22,7 +22,9 @@ import {
   X,
   Smartphone,
   ShieldCheck,
-  Copy
+  Copy,
+  Check,
+  Search
 } from 'lucide-react';
 import { format, isAfter, parseISO, addDays, addHours } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
@@ -56,7 +58,7 @@ import {
   User as FirebaseUser
 } from 'firebase/auth';
 import { db, auth, secondaryAuth } from './firebase';
-import { APP_VERSION, VERSION_HISTORY } from './constants';
+import { APP_VERSION, APP_UPDATE_DATE, VERSION_HISTORY } from './constants';
 
 // --- Utilities ---
 function cn(...inputs: ClassValue[]) {
@@ -519,6 +521,22 @@ function AppContent() {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [summaryTab, setSummaryTab] = useState<string | null>(null);
+
+  // Admin Order Management (Add / Edit for active or closed plans)
+  const [showAdminOrderModal, setShowAdminOrderModal] = useState(false);
+  const [adminEditingOrder, setAdminEditingOrder] = useState<Order | null>(null);
+  const [adminOrderPlanId, setAdminOrderPlanId] = useState<string>('');
+  const [adminOrderUserName, setAdminOrderUserName] = useState('');
+  const [adminOrderDishId, setAdminOrderDishId] = useState('');
+  const [adminOrderQuantity, setAdminOrderQuantity] = useState<number>(1);
+  const [adminOrderIsPaid, setAdminOrderIsPaid] = useState<boolean>(false);
+  const [adminOrderSearchDish, setAdminOrderSearchDish] = useState('');
+  const [adminOrderNotify, setAdminOrderNotify] = useState(false);
+  const [adminOrderSaving, setAdminOrderSaving] = useState(false);
+
+  // Clipboard & Summary Modal copy states
+  const [copiedSummaryKey, setCopiedSummaryKey] = useState<string | null>(null);
+  const [fallbackCopyText, setFallbackCopyText] = useState<string | null>(null);
 
   const isSuperAdmin = user?.email?.toLowerCase() === 'chiuchuijen@gmail.com';
   const isAdmin = isSuperAdmin || adminUsers.some(u => u.email.toLowerCase() === user?.email?.toLowerCase());
@@ -993,6 +1011,205 @@ ${summaryB}`;
       setQuantity(order.quantity || 1);
       setEditingOrderId(order.id);
       setView('user');
+    }
+  };
+
+  const openAdminCreateOrderModal = (planId: string) => {
+    setAdminEditingOrder(null);
+    setAdminOrderPlanId(planId);
+    setAdminOrderUserName('');
+    const targetPlan = plans.find(p => p.id === planId);
+    const storeDishes = targetPlan ? dishes.filter(d => d.storeId === targetPlan.storeId) : [];
+    setAdminOrderDishId(storeDishes.length > 0 ? storeDishes[0].id : '');
+    setAdminOrderQuantity(1);
+    setAdminOrderIsPaid(false);
+    setAdminOrderSearchDish('');
+    setAdminOrderNotify(false);
+    setShowAdminOrderModal(true);
+  };
+
+  const openAdminEditOrderModal = (order: Order) => {
+    setAdminEditingOrder(order);
+    setAdminOrderPlanId(order.planId);
+    setAdminOrderUserName(order.userName);
+    setAdminOrderDishId(order.dishId);
+    setAdminOrderQuantity(order.quantity || 1);
+    setAdminOrderIsPaid(!!order.isPaid);
+    setAdminOrderSearchDish('');
+    setAdminOrderNotify(false);
+    setShowAdminOrderModal(true);
+  };
+
+  const handleAdminPlanChange = (newPlanId: string) => {
+    setAdminOrderPlanId(newPlanId);
+    const targetPlan = plans.find(p => p.id === newPlanId);
+    const storeDishes = targetPlan ? dishes.filter(d => d.storeId === targetPlan.storeId) : [];
+    if (!storeDishes.some(d => d.id === adminOrderDishId)) {
+      setAdminOrderDishId(storeDishes.length > 0 ? storeDishes[0].id : '');
+    }
+  };
+
+  const handleSaveAdminOrder = async () => {
+    if (!adminOrderPlanId) {
+      alert('請選擇方案！');
+      return;
+    }
+    if (!adminOrderUserName.trim()) {
+      alert('請填寫訂購人姓名或代號！');
+      return;
+    }
+    if (!adminOrderDishId) {
+      alert('請選擇菜色品項！');
+      return;
+    }
+    const q = Number(adminOrderQuantity);
+    if (isNaN(q) || q < 1) {
+      alert('數量至少需為 1 份！');
+      return;
+    }
+
+    setAdminOrderSaving(true);
+    try {
+      const orderData = {
+        planId: adminOrderPlanId,
+        dishId: adminOrderDishId,
+        userName: adminOrderUserName.trim(),
+        uid: adminEditingOrder ? (adminEditingOrder.uid || '') : (user?.uid || ''),
+        quantity: q,
+        isPaid: adminOrderIsPaid,
+        timestamp: adminEditingOrder ? adminEditingOrder.timestamp : new Date().toISOString()
+      };
+
+      if (adminEditingOrder) {
+        await setDoc(doc(db, 'orders', adminEditingOrder.id), {
+          ...orderData,
+          id: adminEditingOrder.id
+        }, { merge: true });
+      } else {
+        const orderRef = doc(collection(db, 'orders'));
+        const newOrderId = orderRef.id;
+        await setDoc(orderRef, {
+          ...orderData,
+          id: newOrderId
+        });
+
+        // Optional notify
+        if (adminOrderNotify && (tgSettings.notifyNewOrder || lineSettings.notifyNewOrder)) {
+          const targetPlan = plans.find(p => p.id === adminOrderPlanId);
+          if (targetPlan) {
+            const store = stores.find(s => s.id === targetPlan.storeId);
+            const dish = dishes.find(d => d.id === adminOrderDishId);
+            const isPlanClosed = targetPlan.isClosed || isAfter(new Date(), parseISO(targetPlan.closingTime));
+            const noteTag = isPlanClosed ? '【管理員補單】' : '【管理員代點】';
+            const text = `🔔 <b>${noteTag} 下單通知</b>
+
+<b>方案名:</b> ${targetPlan.name}
+<b>店家:</b> ${store?.name || '未知店家'}
+<b>用餐日期:</b> ${targetPlan.diningDate}
+
+<b>🆕 訂單內容:</b>
+${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $${(dish?.price || 0) * q})
+<b>付款狀態:</b> ${adminOrderIsPaid ? '已付款' : '未付款'}`;
+
+            if (tgSettings.notifyNewOrder) {
+              sendTelegramMessage(text);
+            }
+            if (lineSettings.notifyNewOrder) {
+              sendLineMessage(text);
+            }
+          }
+        }
+      }
+
+      setShowAdminOrderModal(false);
+      setAdminEditingOrder(null);
+    } catch (e) {
+      console.error('Save admin order error:', e);
+      handleFirestoreError(e, OperationType.WRITE, 'orders');
+    } finally {
+      setAdminOrderSaving(false);
+    }
+  };
+
+  const copyToClipboard = async (text: string): Promise<boolean> => {
+    // Method 1: Modern navigator.clipboard API
+    if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (err) {
+        console.warn('navigator.clipboard.writeText failed, attempting execCommand fallback:', err);
+      }
+    }
+
+    // Method 2: Synchronous document.execCommand('copy') fallback (effective inside iframes & mobile webviews)
+    try {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.top = '0';
+      textArea.style.left = '-9999px';
+      textArea.style.width = '2em';
+      textArea.style.height = '2em';
+      textArea.style.padding = '0';
+      textArea.style.border = 'none';
+      textArea.style.outline = 'none';
+      textArea.style.boxShadow = 'none';
+      textArea.style.background = 'transparent';
+      textArea.style.fontSize = '16px'; // Prevent zooming on iOS Safari
+      textArea.setAttribute('readonly', '');
+      document.body.appendChild(textArea);
+
+      textArea.focus();
+      textArea.select();
+      textArea.setSelectionRange(0, text.length);
+
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      if (successful) {
+        return true;
+      }
+    } catch (err) {
+      console.error('document.execCommand copy fallback failed:', err);
+    }
+
+    return false;
+  };
+
+  const handleCopySectionA = async (plan: Plan, sortedDishGroups: { dish: Dish | undefined; totalQuantity: number; users: { name: string; quantity: number }[] }[]) => {
+    const details = sortedDishGroups.map(group => `$${group.dish?.price || 0} ${group.dish?.name || '未知菜色'} X ${group.totalQuantity}`).join('\n');
+    const totalQ = sortedDishGroups.reduce((acc, group) => acc + group.totalQuantity, 0);
+    const totalA = sortedDishGroups.reduce((acc, group) => acc + (group.dish?.price || 0) * group.totalQuantity, 0);
+    const copyText = `${details}\n\n總數量：${totalQ} 份\n總金額：$${totalA}`;
+
+    const success = await copyToClipboard(copyText);
+    if (success) {
+      setCopiedSummaryKey(`A-${plan.id}`);
+      setTimeout(() => {
+        setCopiedSummaryKey(null);
+      }, 2500);
+    } else {
+      setFallbackCopyText(copyText);
+    }
+  };
+
+  const handleCopySectionB = async (plan: Plan, sortedDishGroups: { dish: Dish | undefined; totalQuantity: number; users: { name: string; quantity: number }[] }[]) => {
+    const details = sortedDishGroups.map(group => {
+      const userList = group.users.map(u => u.quantity > 1 ? `${u.name}X${u.quantity}` : u.name).join('、');
+      return `$${group.dish?.price || 0} ${group.dish?.name || '未知菜色'} X ${group.totalQuantity}\n${userList}`;
+    }).join('\n\n');
+    const totalQ = sortedDishGroups.reduce((acc, group) => acc + group.totalQuantity, 0);
+    const totalA = sortedDishGroups.reduce((acc, group) => acc + (group.dish?.price || 0) * group.totalQuantity, 0);
+    const copyText = `${details}\n\n總數量：${totalQ} 份\n總金額：$${totalA}`;
+
+    const success = await copyToClipboard(copyText);
+    if (success) {
+      setCopiedSummaryKey(`B-${plan.id}`);
+      setTimeout(() => {
+        setCopiedSummaryKey(null);
+      }, 2500);
+    } else {
+      setFallbackCopyText(copyText);
     }
   };
 
@@ -2249,18 +2466,24 @@ ${summaryB}`;
                     <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide border-b border-zinc-100">
                       {[...plans].sort((a, b) => b.diningDate.localeCompare(a.diningDate)).map((plan, index) => {
                         const isActive = adminSelectedPlanId ? adminSelectedPlanId === plan.id : index === 0;
+                        const isClosed = plan.isClosed || isAfter(new Date(), parseISO(plan.closingTime));
                         return (
                           <button
                             key={plan.id}
                             onClick={() => setAdminSelectedPlanId(plan.id)}
                             className={cn(
-                              "px-4 py-2 rounded-t-xl text-sm font-bold whitespace-nowrap transition-all border-b-2",
+                              "px-4 py-2 rounded-t-xl text-sm font-bold whitespace-nowrap transition-all border-b-2 flex items-center gap-1.5",
                               isActive
                                 ? "border-orange-600 text-orange-600 bg-orange-50/50"
                                 : "border-transparent text-zinc-400 hover:text-zinc-600 hover:bg-zinc-50"
                             )}
                           >
-                            {plan.name}
+                            <span>{plan.name}</span>
+                            {isClosed ? (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-200 text-zinc-600 font-medium">已結單</span>
+                            ) : (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-medium">進行中</span>
+                            )}
                           </button>
                         );
                       })}
@@ -2278,25 +2501,47 @@ ${summaryB}`;
                       
                       const planOrders = orders.filter(o => o.planId === plan.id);
                       const store = stores.find(s => s.id === plan.storeId);
+                      const isPlanClosed = plan.isClosed || isAfter(new Date(), parseISO(plan.closingTime));
                       
                       // Calculate dish summary for this plan
                       const dishSummary: { [dishId: string]: { name: string, count: number } } = {};
+                      let totalAmount = 0;
+                      let totalQuantity = 0;
                       planOrders.forEach(order => {
+                        const dish = dishes.find(d => d.id === order.dishId);
                         if (!dishSummary[order.dishId]) {
-                          const dish = dishes.find(d => d.id === order.dishId);
                           dishSummary[order.dishId] = { name: dish?.name || '未知菜色', count: 0 };
                         }
-                        dishSummary[order.dishId].count += order.quantity;
+                        dishSummary[order.dishId].count += order.quantity || 0;
+                        totalQuantity += order.quantity || 0;
+                        totalAmount += (dish?.price || 0) * (order.quantity || 0);
                       });
 
                       return (
                         <div key={plan.id} className="space-y-6">
                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-zinc-50/50 p-6 rounded-2xl border border-zinc-100">
                             <div className="space-y-1">
-                              <h4 className="text-xl font-bold text-zinc-900">{plan.name}</h4>
-                              <div className="flex items-center gap-4 text-sm text-zinc-500">
-                                <span className="flex items-center gap-1"><Calendar className="w-4 h-4" /> {plan.diningDate}</span>
-                                <span className="flex items-center gap-1"><Store className="w-4 h-4" /> {store?.name || '未知店家'}</span>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h4 className="text-xl font-bold text-zinc-900">{plan.name}</h4>
+                                {isPlanClosed ? (
+                                  <span className="bg-red-50 text-red-600 border border-red-200 text-xs px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                                    已結單
+                                  </span>
+                                ) : (
+                                  <span className="bg-green-50 text-green-700 border border-green-200 text-xs px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                                    進行中
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-4 text-sm text-zinc-500 flex-wrap">
+                                <span className="flex items-center gap-1"><Calendar className="w-4 h-4 text-zinc-400" /> {plan.diningDate}</span>
+                                <span className="flex items-center gap-1"><Store className="w-4 h-4 text-zinc-400" /> {store?.name || '未知店家'}</span>
+                                <span className="flex items-center gap-1"><Clock className="w-4 h-4 text-zinc-400" /> 截止: {plan.closingTime.replace('T', ' ')}</span>
+                              </div>
+                              <div className="text-xs text-zinc-500 pt-1">
+                                目前累計：<span className="font-bold text-orange-600">{totalQuantity}</span> 份，總金額：<span className="font-bold text-orange-600">${totalAmount}</span> 元
                               </div>
                             </div>
                             
@@ -2310,18 +2555,26 @@ ${summaryB}`;
                                   </div>
                                 ))}
                               </div>
-                              <Button 
-                                variant="outline"
-                                onClick={async () => {
-                                  if (confirm(`確定要發送「${plan.name}」的結單通知到 Telegram 嗎？`)) {
-                                    await sendPlanCloseNotification(plan.id, true);
-                                    alert('已觸發發送結單通知！');
-                                  }
-                                }}
-                                className="text-blue-600 border-blue-200 hover:bg-blue-50 text-xs py-1.5"
-                              >
-                                發送結單通知
-                              </Button>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Button 
+                                  onClick={() => openAdminCreateOrderModal(plan.id)}
+                                  className="bg-orange-600 hover:bg-orange-700 text-white text-xs py-2 px-3.5 flex items-center gap-1.5 shadow-sm rounded-xl font-bold"
+                                >
+                                  <Plus className="w-4 h-4" /> 新增訂單 {isPlanClosed ? '(補單)' : ''}
+                                </Button>
+                                <Button 
+                                  variant="outline"
+                                  onClick={async () => {
+                                    if (confirm(`確定要發送「${plan.name}」的結單通知到 Telegram / Line 嗎？`)) {
+                                      await sendPlanCloseNotification(plan.id, true);
+                                      alert('已觸發發送結單通知！');
+                                    }
+                                  }}
+                                  className="text-blue-600 border-blue-200 hover:bg-blue-50 text-xs py-2 px-3 rounded-xl"
+                                >
+                                  發送結單通知
+                                </Button>
+                              </div>
                             </div>
                           </div>
 
@@ -2362,16 +2615,37 @@ ${summaryB}`;
                                       <td className="py-4 px-4 text-orange-600 font-bold">${(dish?.price || 0) * (order.quantity || 0)}</td>
                                       <td className="py-4 px-4 text-zinc-400 text-xs">{format(parseISO(order.timestamp), 'MM/dd HH:mm')}</td>
                                       <td className="py-4 px-4">
-                                        <div className="flex items-center gap-2">
-                                          <button onClick={() => startEditOrder(order)} className="text-zinc-400 hover:text-orange-600"><Edit2 className="w-4 h-4" /></button>
-                                          <button onClick={() => setConfirmDelete({ col: 'orders', id: order.id })} className="text-zinc-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                                        <div className="flex items-center gap-1">
+                                          <button 
+                                            onClick={() => openAdminEditOrderModal(order)} 
+                                            className="p-1.5 text-zinc-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                                            title="修改訂單 (管理員)"
+                                          >
+                                            <Edit2 className="w-4 h-4" />
+                                          </button>
+                                          <button 
+                                            onClick={() => setConfirmDelete({ col: 'orders', id: order.id })} 
+                                            className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                            title="刪除訂單"
+                                          >
+                                            <Trash2 className="w-4 h-4" />
+                                          </button>
                                         </div>
                                       </td>
                                     </tr>
                                   );
                                 }) : (
                                   <tr>
-                                    <td colSpan={7} className="py-12 text-center text-zinc-400">目前尚無訂單</td>
+                                    <td colSpan={7} className="py-12 text-center text-zinc-400">
+                                      <p className="mb-2">目前尚無訂單</p>
+                                      <Button 
+                                        onClick={() => openAdminCreateOrderModal(plan.id)}
+                                        variant="outline"
+                                        className="text-xs text-orange-600 border-orange-200 hover:bg-orange-50"
+                                      >
+                                        <Plus className="w-3.5 h-3.5 mr-1" /> 新增第一筆訂單 {isPlanClosed ? '(補單)' : ''}
+                                      </Button>
+                                    </td>
                                   </tr>
                                 )}
                               </tbody>
@@ -2798,30 +3072,61 @@ ${summaryB}`;
               className="relative bg-white -zinc-900 rounded-3xl shadow-2xl max-w-lg w-full p-8 space-y-6 border border-zinc-100 -zinc-800"
               onClick={e => e.stopPropagation()}
             >
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2 text-orange-600">
-                  <div className="w-10 h-10 rounded-xl bg-orange-50 -orange-900/20 flex items-center justify-center">
-                    <AlertCircle className="w-6 h-6" />
+              <div className="flex justify-between items-start">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-orange-600">
+                    <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center">
+                      <AlertCircle className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-2xl font-display font-black tracking-tight">{t('announcement')}</h3>
                   </div>
-                  <h3 className="text-2xl font-display font-black tracking-tight">{t('announcement')}</h3>
+                  
+                  {/* Version & Update Date Display */}
+                  <div className="flex items-center gap-2 pt-0.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setShowVersionHistory(true)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-50 hover:bg-orange-100 border border-orange-200/80 text-orange-700 font-mono text-xs font-bold transition-colors cursor-pointer"
+                      title="點擊查看版本歷史紀錄"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                      <span>{APP_VERSION}</span>
+                    </button>
+                    <span className="text-xs text-zinc-400 font-medium">
+                      更新日期：<span className="font-mono text-zinc-600 font-semibold">{APP_UPDATE_DATE}</span>
+                    </span>
+                  </div>
                 </div>
                 <button 
                   onClick={() => setShowAnnouncement(false)}
-                  className="p-2 rounded-full hover:bg-zinc-100 -zinc-800 transition-colors"
+                  className="p-2 rounded-full hover:bg-zinc-100 transition-colors text-zinc-400 hover:text-zinc-600"
                 >
-                  <Plus className="w-6 h-6 rotate-45 text-zinc-400" />
+                  <Plus className="w-6 h-6 rotate-45" />
                 </button>
               </div>
               
-              <div className="bg-zinc-50 -zinc-800/50 p-6 rounded-2xl border border-zinc-100 -zinc-700">
-                <p className="text-zinc-700 -zinc-300 leading-relaxed whitespace-pre-wrap font-medium max-h-[50vh] overflow-y-auto">
+              <div className="bg-zinc-50 p-6 rounded-2xl border border-zinc-100">
+                <p className="text-zinc-700 leading-relaxed whitespace-pre-wrap font-medium max-h-[50vh] overflow-y-auto">
                   {announcement.content}
                 </p>
               </div>
               
-              <Button onClick={() => setShowAnnouncement(false)} className="w-full py-4 text-lg">
-                我知道了
-              </Button>
+              <div className="space-y-3">
+                <Button onClick={() => setShowAnnouncement(false)} className="w-full py-4 text-lg">
+                  我知道了
+                </Button>
+                <div className="flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => setShowVersionHistory(true)}
+                    className="text-xs text-zinc-400 hover:text-orange-600 transition-colors flex items-center gap-1.5 py-0.5"
+                  >
+                    <span>版本 {APP_VERSION} ({APP_UPDATE_DATE})</span>
+                    <span className="text-zinc-300">·</span>
+                    <span className="underline underline-offset-2">查看版本更新紀錄</span>
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}
@@ -3087,7 +3392,33 @@ ${summaryB}`;
                     <div key={plan.id} className="space-y-8">
                       {/* Section A */}
                       <div className="space-y-3">
-                        <h4 className="font-bold text-lg text-orange-600 border-b pb-2">A區 - 報單用</h4>
+                        <div className="flex items-center justify-between border-b pb-2">
+                          <h4 className="font-bold text-lg text-orange-600">A區 - 報單用</h4>
+                          {sortedDishGroups.length > 0 && (
+                            <button
+                              onClick={() => handleCopySectionA(plan, sortedDishGroups)}
+                              className={cn(
+                                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm",
+                                copiedSummaryKey === `A-${plan.id}`
+                                  ? "bg-green-600 text-white"
+                                  : "bg-orange-100 hover:bg-orange-200 text-orange-700"
+                              )}
+                              title="複製A區報單內容"
+                            >
+                              {copiedSummaryKey === `A-${plan.id}` ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5" />
+                                  已複製到剪貼簿！
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3.5 h-3.5" />
+                                  一鍵複製A區
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
                         <div className="bg-zinc-50 p-4 rounded-xl font-mono text-sm whitespace-pre-wrap">
                           {sortedDishGroups.map(group => (
                             <div key={group.dish?.id}>${group.dish?.price || 0} {group.dish?.name || '未知菜色'} X {group.totalQuantity}</div>
@@ -3099,27 +3430,25 @@ ${summaryB}`;
                                 <span className="ml-4">總金額：${sortedDishGroups.reduce((acc, group) => acc + (group.dish?.price || 0) * group.totalQuantity, 0)}</span>
                               </div>
                               <button
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  const details = sortedDishGroups.map(group => `$${group.dish?.price || 0} ${group.dish?.name || '未知菜色'} X ${group.totalQuantity}`).join('\n');
-                                  const totalQ = sortedDishGroups.reduce((acc, group) => acc + group.totalQuantity, 0);
-                                  const totalA = sortedDishGroups.reduce((acc, group) => acc + (group.dish?.price || 0) * group.totalQuantity, 0);
-                                  const copyText = `${details}\n\n總數量：${totalQ} 份\n總金額：$${totalA}`;
-                                  navigator.clipboard.writeText(copyText).then(() => {
-                                    const btn = e.currentTarget;
-                                    const originalText = btn.innerHTML;
-                                    btn.innerHTML = '<span class="flex items-center gap-1.5"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check"><path d="M20 6 9 17l-5-5"/></svg>已複製</span>';
-                                    setTimeout(() => {
-                                      btn.innerHTML = originalText;
-                                    }, 2000);
-                                  }).catch(err => {
-                                    alert('複製失敗，請手動複製');
-                                  });
-                                }}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-lg text-xs font-bold transition-colors"
+                                onClick={() => handleCopySectionA(plan, sortedDishGroups)}
+                                className={cn(
+                                  "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm",
+                                  copiedSummaryKey === `A-${plan.id}`
+                                    ? "bg-green-600 text-white"
+                                    : "bg-orange-600 hover:bg-orange-700 text-white"
+                                )}
                               >
-                                <Copy className="w-3.5 h-3.5" />
-                                複製
+                                {copiedSummaryKey === `A-${plan.id}` ? (
+                                  <>
+                                    <Check className="w-3.5 h-3.5" />
+                                    已複製！
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3.5 h-3.5" />
+                                    複製報單內容
+                                  </>
+                                )}
                               </button>
                             </div>
                           )}
@@ -3129,7 +3458,33 @@ ${summaryB}`;
 
                       {/* Section B */}
                       <div className="space-y-3">
-                        <h4 className="font-bold text-lg text-blue-600 border-b pb-2">B區 - 取餐比對用</h4>
+                        <div className="flex items-center justify-between border-b pb-2">
+                          <h4 className="font-bold text-lg text-blue-600">B區 - 取餐比對用</h4>
+                          {sortedDishGroups.length > 0 && (
+                            <button
+                              onClick={() => handleCopySectionB(plan, sortedDishGroups)}
+                              className={cn(
+                                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm",
+                                copiedSummaryKey === `B-${plan.id}`
+                                  ? "bg-green-600 text-white"
+                                  : "bg-blue-100 hover:bg-blue-200 text-blue-700"
+                              )}
+                              title="複製B區取餐明細"
+                            >
+                              {copiedSummaryKey === `B-${plan.id}` ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5" />
+                                  已複製到剪貼簿！
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3.5 h-3.5" />
+                                  複製B區明細
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
                         <div className="bg-zinc-50 p-4 rounded-xl font-mono text-sm space-y-4">
                           {sortedDishGroups.map(group => (
                             <div key={group.dish?.id} className="space-y-1">
@@ -3145,6 +3500,415 @@ ${summaryB}`;
                     </div>
                   );
                 })}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Fallback Manual Copy Modal (When browser / iframe blocks clipboard access) */}
+      <AnimatePresence>
+        {fallbackCopyText !== null && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-zinc-900/50 backdrop-blur-sm"
+              onClick={() => setFallbackCopyText(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="relative bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 space-y-4 border border-zinc-100"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center pb-2 border-b border-zinc-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-orange-100 flex items-center justify-center text-orange-600 font-bold shrink-0">
+                    <Copy className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg text-zinc-900">明細內容複製</h3>
+                    <p className="text-xs text-zinc-400">文字已為您全部選取</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setFallbackCopyText(null)} 
+                  className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-400 hover:text-zinc-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs text-zinc-500 font-medium">
+                  因部分瀏覽器或外嵌視窗安全性限制自動存取剪貼簿，請直接點擊下方文字框（已自動全選），按鍵盤 <kbd className="px-1.5 py-0.5 bg-zinc-200 rounded text-zinc-700 font-mono">Ctrl+C</kbd> / <kbd className="px-1.5 py-0.5 bg-zinc-200 rounded text-zinc-700 font-mono">Cmd+C</kbd> 或長按複製：
+                </p>
+                <textarea
+                  id="fallback-copy-textarea"
+                  readOnly
+                  rows={8}
+                  value={fallbackCopyText}
+                  onFocus={e => e.target.select()}
+                  onClick={e => (e.target as HTMLTextAreaElement).select()}
+                  className="w-full p-3 font-mono text-sm bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 select-all leading-relaxed"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 py-2 text-xs font-bold"
+                  onClick={() => {
+                    const el = document.getElementById('fallback-copy-textarea') as HTMLTextAreaElement;
+                    if (el) {
+                      el.focus();
+                      el.select();
+                    }
+                  }}
+                >
+                  全選文字
+                </Button>
+                <Button
+                  className="flex-1 py-2 text-xs font-bold"
+                  onClick={() => {
+                    const el = document.getElementById('fallback-copy-textarea') as HTMLTextAreaElement;
+                    if (el) {
+                      el.focus();
+                      el.select();
+                      try {
+                        const ok = document.execCommand('copy');
+                        if (ok) {
+                          alert('已成功複製到剪貼簿！');
+                          setFallbackCopyText(null);
+                        } else {
+                          alert('請直接按 Ctrl+C / Cmd+C 或長按複製');
+                        }
+                      } catch (e) {
+                        alert('請直接按 Ctrl+C / Cmd+C 或長按複製');
+                      }
+                    }
+                  }}
+                >
+                  再次嘗試複製
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="py-2 px-4 text-xs font-bold"
+                  onClick={() => setFallbackCopyText(null)}
+                >
+                  關閉
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Admin Order Create / Edit Modal */}
+      <AnimatePresence>
+        {showAdminOrderModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-zinc-900/40 backdrop-blur-sm"
+              onClick={() => setShowAdminOrderModal(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 sm:p-8 flex flex-col max-h-[90vh] border border-zinc-100 my-auto overflow-hidden"
+            >
+              {/* Header */}
+              <div className="flex justify-between items-center pb-4 border-b border-zinc-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-orange-100 flex items-center justify-center text-orange-600 font-bold shrink-0">
+                    <ShoppingBag className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-zinc-900">
+                      {adminEditingOrder ? '修改訂單 (管理員)' : '新增訂單 (管理員補單)'}
+                    </h3>
+                    <p className="text-xs text-zinc-400">
+                      {adminEditingOrder ? '可調整姓名、餐點品項、數量及付款狀態' : '可為已結單或進行中方案補入新訂單'}
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowAdminOrderModal(false)} 
+                  className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-400 hover:text-zinc-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="space-y-4 py-4 overflow-y-auto pr-1">
+                {/* Plan Info / Selection */}
+                {(() => {
+                  const targetPlan = plans.find(p => p.id === adminOrderPlanId);
+                  const isPlanClosed = targetPlan ? (targetPlan.isClosed || isAfter(new Date(), parseISO(targetPlan.closingTime))) : false;
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-zinc-600">方案與狀態</label>
+                        {isPlanClosed ? (
+                          <span className="text-[11px] font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                            已結單 (補單模式)
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                            進行中
+                          </span>
+                        )}
+                      </div>
+
+                      {adminEditingOrder ? (
+                        <div className="p-3 bg-zinc-50 rounded-xl border border-zinc-200 text-sm font-bold text-zinc-800 flex justify-between items-center">
+                          <span>{targetPlan?.name || '未知方案'}</span>
+                          <span className="text-xs text-zinc-400 font-normal">
+                            {stores.find(s => s.id === targetPlan?.storeId)?.name}
+                          </span>
+                        </div>
+                      ) : (
+                        <select
+                          value={adminOrderPlanId}
+                          onChange={e => handleAdminPlanChange(e.target.value)}
+                          className="w-full px-3.5 py-2.5 text-sm bg-white rounded-xl border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all font-bold text-zinc-800"
+                        >
+                          {plans.map(p => {
+                            const closed = p.isClosed || isAfter(new Date(), parseISO(p.closingTime));
+                            return (
+                              <option key={p.id} value={p.id}>
+                                {p.name} {closed ? '【已結單】' : '【進行中】'} ({p.diningDate})
+                              </option>
+                            );
+                          })}
+                        </select>
+                      )}
+
+                      {isPlanClosed && (
+                        <div className="p-3 bg-amber-50 text-amber-900 rounded-xl border border-amber-200/80 text-xs flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                          <div>
+                            <strong>此方案已結單或已截止</strong>。身為管理員，您可以直接為錯過時間的同仁補單或更改餐點，送出後將立即同步計入訂單明細與總金額。
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* User Name */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-zinc-600 flex items-center gap-1">
+                    <span>訂購人姓名 / 員工代號</span>
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <Input 
+                    value={adminOrderUserName}
+                    onChange={setAdminOrderUserName}
+                    placeholder="例如：王小明 或 A05"
+                    className="w-full"
+                  />
+                </div>
+
+                {/* Dish Selection */}
+                {(() => {
+                  const targetPlan = plans.find(p => p.id === adminOrderPlanId);
+                  const storeDishes = targetPlan ? dishes.filter(d => d.storeId === targetPlan.storeId) : [];
+                  const filteredDishes = storeDishes.filter(d => 
+                    !adminOrderSearchDish.trim() || 
+                    d.name.toLowerCase().includes(adminOrderSearchDish.toLowerCase()) ||
+                    (d.category && d.category.toLowerCase().includes(adminOrderSearchDish.toLowerCase()))
+                  );
+
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-zinc-600 flex items-center gap-1">
+                          <span>選擇菜色品項</span>
+                          <span className="text-red-500">*</span>
+                        </label>
+                        {storeDishes.length > 5 && (
+                          <span className="text-[11px] text-zinc-400">共 {storeDishes.length} 種菜色</span>
+                        )}
+                      </div>
+
+                      {storeDishes.length > 5 && (
+                        <div className="relative">
+                          <input 
+                            type="text"
+                            value={adminOrderSearchDish}
+                            onChange={e => setAdminOrderSearchDish(e.target.value)}
+                            placeholder="快速搜尋菜名或分類..."
+                            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-zinc-200 focus:outline-none focus:border-orange-500"
+                          />
+                          <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-2.5" />
+                        </div>
+                      )}
+
+                      <div className="max-h-44 overflow-y-auto space-y-1.5 border border-zinc-200 rounded-xl p-2 bg-zinc-50/50">
+                        {filteredDishes.length > 0 ? (
+                          filteredDishes.map(dish => {
+                            const isSelected = adminOrderDishId === dish.id;
+                            return (
+                              <div
+                                key={dish.id}
+                                onClick={() => setAdminOrderDishId(dish.id)}
+                                className={cn(
+                                  "px-3 py-2 rounded-lg cursor-pointer transition-all flex items-center justify-between text-sm",
+                                  isSelected 
+                                    ? "bg-orange-500 text-white font-bold shadow-sm" 
+                                    : "bg-white hover:bg-zinc-100 text-zinc-800 border border-zinc-100"
+                                )}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span>{dish.name}</span>
+                                  {dish.category && (
+                                    <span className={cn(
+                                      "text-[10px] px-1.5 py-0.5 rounded",
+                                      isSelected ? "bg-orange-600 text-white" : "bg-zinc-100 text-zinc-500"
+                                    )}>
+                                      {dish.category}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className={cn(
+                                  "font-mono font-bold",
+                                  isSelected ? "text-white" : "text-orange-600"
+                                )}>
+                                  ${dish.price}
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="py-6 text-center text-xs text-zinc-400">
+                            {storeDishes.length === 0 ? '此店家尚無菜色，請先至店家管理新增菜色' : '查無符合的菜色'}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Quantity & Payment Status */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                  {/* Quantity */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-zinc-600">購買數量</label>
+                    <div className="flex items-center bg-zinc-100 p-1 rounded-xl border border-zinc-200">
+                      <button 
+                        type="button"
+                        onClick={() => setAdminOrderQuantity(Math.max(1, adminOrderQuantity - 1))}
+                        className="w-9 h-9 rounded-lg bg-white shadow-sm flex items-center justify-center hover:bg-zinc-50 transition-all active:scale-95"
+                      >
+                        <Minus className="w-4 h-4 text-zinc-600" />
+                      </button>
+                      <input 
+                        type="number"
+                        min="1"
+                        value={adminOrderQuantity}
+                        onChange={e => setAdminOrderQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-full text-center bg-transparent font-bold font-display text-base border-none focus:outline-none"
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => setAdminOrderQuantity(adminOrderQuantity + 1)}
+                        className="w-9 h-9 rounded-lg bg-white shadow-sm flex items-center justify-center hover:bg-zinc-50 transition-all active:scale-95"
+                      >
+                        <Plus className="w-4 h-4 text-zinc-600" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Payment Status */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-zinc-600">付款狀態</label>
+                    <div className="grid grid-cols-2 gap-2 h-[46px]">
+                      <button
+                        type="button"
+                        onClick={() => setAdminOrderIsPaid(false)}
+                        className={cn(
+                          "rounded-xl text-xs font-bold transition-all border",
+                          !adminOrderIsPaid 
+                            ? "bg-zinc-800 text-white border-zinc-800 shadow-sm" 
+                            : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:bg-zinc-100"
+                        )}
+                      >
+                        未付款
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAdminOrderIsPaid(true)}
+                        className={cn(
+                          "rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1",
+                          adminOrderIsPaid 
+                            ? "bg-green-600 text-white border-green-600 shadow-sm" 
+                            : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:bg-zinc-100"
+                        )}
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" /> 已付款
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Total Price preview */}
+                {(() => {
+                  const targetPlan = plans.find(p => p.id === adminOrderPlanId);
+                  const storeDishes = targetPlan ? dishes.filter(d => d.storeId === targetPlan.storeId) : [];
+                  const dish = storeDishes.find(d => d.id === adminOrderDishId);
+                  const price = (dish?.price || 0) * (adminOrderQuantity || 1);
+                  return (
+                    <div className="p-3 bg-zinc-50 rounded-xl border border-zinc-100 flex items-center justify-between text-sm">
+                      <span className="text-zinc-500 text-xs">小計金額預覽:</span>
+                      <span className="font-bold text-orange-600 text-base">
+                        ${price} <span className="text-xs text-zinc-400 font-normal">({dish?.name || '未選'} x {adminOrderQuantity})</span>
+                      </span>
+                    </div>
+                  );
+                })()}
+
+                {/* Optional Notify Checkbox (only when creating new order) */}
+                {!adminEditingOrder && (
+                  <label className="flex items-center gap-2 cursor-pointer pt-1">
+                    <input 
+                      type="checkbox"
+                      checked={adminOrderNotify}
+                      onChange={e => setAdminOrderNotify(e.target.checked)}
+                      className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500 border-zinc-300 cursor-pointer"
+                    />
+                    <span className="text-xs text-zinc-600">同步發送下單通知至 Telegram / Line 群組</span>
+                  </label>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex gap-3 pt-4 border-t border-zinc-100 mt-2">
+                <Button 
+                  variant="outline" 
+                  className="flex-1 py-2.5" 
+                  onClick={() => setShowAdminOrderModal(false)}
+                  disabled={adminOrderSaving}
+                >
+                  取消
+                </Button>
+                <Button 
+                  className="flex-1 py-2.5 font-bold" 
+                  onClick={handleSaveAdminOrder}
+                  disabled={adminOrderSaving}
+                >
+                  {adminOrderSaving ? '儲存中...' : (adminEditingOrder ? '確認修改' : '確認新增 (補單)')}
+                </Button>
               </div>
             </motion.div>
           </div>

@@ -1,5 +1,6 @@
 {
   "name": "同事團購訂便當平台",
-  "description": "使用 Google Sheets 作為後端的同事團購訂便當平台，包含前台訂購與後台管理功能。",
-  "requestFramePermissions": []
+  "description": "同事團購訂便當平台，包含前台訂購與後台管理功能，支援已結單方案補單與即時明細彙整。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
