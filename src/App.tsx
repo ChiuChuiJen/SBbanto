@@ -19,6 +19,7 @@ import {
   LogIn,
   LogOut,
   Globe,
+  Languages,
   X,
   Smartphone,
   ShieldCheck,
@@ -308,35 +309,165 @@ interface AdminUser {
 
 function AppContent() {
   const [view, setView] = useState<'user' | 'admin'>('user');
-  const [language, setLanguage] = useState<'zh' | 'en' | 'vi'>('zh');
+  const [language, setLanguage] = useState<'zh' | 'en' | 'vi'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('app_language');
+      if (saved === 'zh' || saved === 'en' || saved === 'vi') return saved;
+    }
+    return 'zh';
+  });
+
+  const handleLanguageChange = (newLang: 'zh' | 'en' | 'vi') => {
+    setLanguage(newLang);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('app_language', newLang);
+    }
+  };
 
   // Translations
   const translations = {
     zh: {
+      // Header & Navigation
       title: "假日就是要吃便當",
       adminBackend: "管理後台",
       backToFront: "回到前台",
+      adminShort: "後台",
+      frontShort: "前台",
+      report: "回報",
+      reportTitle: "系統回報",
       login: "登入",
       logout: "登出",
       loading: "載入中...",
+      shortcutSetup: "捷徑設置",
+      versionHistory: "版本歷史",
+
+      // Banner & Community
+      joinLineGroup: "加入 假日就是要訂便當 群組",
+      joinLineGroupDesc: "可在第一時間獲取訂餐資訊",
+
+      // User View Tabs & Plan List
       plans: "團購方案",
-      orders: "訂單明細",
+      allOrders: "全部訂單",
       activePlans: "進行中的團購",
       selectPlan: "選擇一個方案開始訂購",
       noActivePlans: "目前沒有進行中的團購",
+      statusOpen: "進行中",
+      diningDate: "用餐日期",
+      closingTime: "截止時間",
+      unknownStore: "未知店家",
+
+      // Detail Order Form
       backToList: "返回列表",
+      fromStore: "來自",
       step1: "輸入姓名或代號",
+      namePlaceholder: "例如：王小明 或 A01",
       step2: "選擇菜色",
       step3: "數量",
+      categoryOther: "其它",
       confirmOrder: "確認訂購",
       confirmEdit: "確認修改",
       orderSuccess: "訂購成功！",
       editSuccess: "修改成功！",
+      currentOrders: "目前訂單明細",
       myOrder: "我的",
       paid: "已付款",
       unpaid: "未付款",
       noOrders: "目前尚無人訂購",
-      allOrders: "全部訂單",
+      editOrder: "修改訂單",
+      delete: "刪除",
+
+      // All Orders Tab
+      allOrderDetails: "所有訂單明細",
+      allOrderDetailsDesc: "查看各方案的訂購狀況",
+      noPlansAvailable: "目前沒有任何方案",
+      totalOrderers: "總訂購人數",
+      totalQuantity: "總訂購數量",
+      totalAmount: "總金額",
+      peopleUnit: "人",
+      itemUnit: "份",
+      colOrderer: "訂購人",
+      colDish: "餐點",
+      colQuantity: "數量",
+      colSubtotal: "小計",
+      colStatus: "狀態",
+
+      // User Order Edit Modal
+      editOrderTitle: "修改訂單內容",
+      customerNameLabel: "訂購人姓名",
+      enterNamePlaceholder: "請輸入姓名",
+      chooseDish: "選擇餐點",
+      clickToSelect: "點擊品項即可選取",
+      searchDishesPlaceholder: "快速搜尋餐點或分類...",
+      noDishesInStore: "此店家尚無菜色",
+      noMatchingDishes: "查無符合的菜色",
+      orderQuantity: "購買數量",
+      estimatedSubtotal: "預估小計金額：",
+      noDishSelected: "尚未選取餐點",
+      saving: "儲存中...",
+      cancel: "取消",
+      confirm: "確定",
+      save: "儲存",
+
+      // Delete Confirmation Modal
+      confirmDeleteTitle: "確認刪除？",
+      confirmDeleteDesc: "此操作無法復原，確定要刪除這筆資料嗎？",
+      confirmDeleteBtn: "確定刪除",
+
+      // Announcement Modal
+      announcement: "公告內容",
+      iUnderstand: "我知道了",
+      updateDate: "更新日期：",
+      versionHistoryTitle: "版本歷史紀錄",
+      viewVersionHistory: "查看版本更新紀錄",
+
+      // Report Modal
+      reportModalTitle: "問題回報",
+      reportContentLabel: "回報內容",
+      reportPlaceholder: "請輸入您想回報的問題或建議...",
+      sendReport: "發送回報",
+
+      // LINE QR Modal
+      joinLineModalTitle: "加入 LINE 群組",
+      lineGroupLink: "LINE 群組連結",
+
+      // Login Modal
+      adminLoginTitle: "管理員登入",
+      accountLabel: "帳號",
+      accountPlaceholder: "輸入管理員帳號",
+      passwordLabel: "密碼",
+      passwordPlaceholder: "輸入密碼",
+      passwordLoginBtn: "帳號密碼登入",
+      orText: "或",
+      googleLoginBtn: "Google 登入",
+
+      // Summary Modal
+      orderSummaryTitle: "訂單明細彙整",
+      sectionATitle: "A區 - 報單用",
+      sectionBTitle: "B區 - 取餐比對用",
+      copySectionA: "一鍵複製A區",
+      copySectionB: "複製B區明細",
+      copyReportContent: "複製報單內容",
+      copied: "已複製！",
+      copiedToClipboard: "已複製到剪貼簿！",
+
+      // Shortcut Modal
+      shortcutModalTitle: "桌面捷徑設置方式",
+      iosSectionTitle: "iPhone / iPad",
+      androidSectionTitle: "安卓系統",
+
+      // Web Translate Modal
+      webTranslate: "網頁翻譯",
+      webTranslateTitle: "網頁全頁翻譯 (自動翻譯菜色)",
+      webTranslateDesc: "使用 Google 翻譯或瀏覽器內建翻譯，可自動將整頁（包括店家名、便當菜色品項、備註）即時翻譯成您習慣的語言！",
+      googleTranslateTitle: "即時切換翻譯語言 (Google Translate)",
+      browserTranslateTitle: "如何使用手機 / 電腦瀏覽器內建翻譯？",
+      chromeMobileTip: "手機 Chrome：點擊右上角「三個點選單」➔ 點選「翻譯...」即可整頁連同菜名自動翻譯！",
+      safariTip: "iPhone Safari：點擊網址列左側的「大小 / aA」圖示 ➔ 選擇「翻譯網站」即可。",
+      chromeDesktopTip: "電腦 Chrome / Edge：在頁面任何空白處按滑鼠右鍵 ➔ 點選「翻譯成中文 / 英文 / 越南文」。",
+      whyTranslateDishes: "💡 為什麼網頁翻譯更方便？因為一般多國語言只能翻譯按鈕標籤，而網頁翻譯可以直接把「排骨飯、雞腿飯、控肉便當」等所有菜色即時翻譯成外籍同仁看得懂的文字！",
+      restoreOriginalText: "還原繁體中文原版",
+
+      // Admin Dashboard Info
       adminTitle: "管理後台",
       adminDesc: "管理店家、菜色與團購方案",
       tabPlans: "方案",
@@ -344,129 +475,348 @@ function AppContent() {
       tabDishes: "菜色",
       tabOrders: "訂單",
       tabAnnounce: "公告",
+      tabPermissions: "管理權限",
       addPlan: "新增方案",
       addStore: "新增店家",
       addDish: "新增單筆菜色",
       updateDish: "更新菜色",
       batchAdd: "批次新增",
-      edit: "修改",
-      delete: "刪除",
       category: "分類",
       price: "價格",
       dishName: "菜色名稱",
       store: "店家",
-      diningDate: "用餐日期",
-      closingTime: "截止時間",
       planName: "方案名稱",
       storeName: "店家名稱",
       storeDesc: "店家描述",
-      announcement: "公告內容",
-      save: "儲存",
-      cancel: "取消",
+      edit: "修改",
     },
     en: {
-      title: "Holiday Bento",
-      adminBackend: "Admin",
-      backToFront: "Client",
+      // Header & Navigation
+      title: "Weekend Bento",
+      adminBackend: "Admin Dashboard",
+      backToFront: "Back to Home",
+      adminShort: "Admin",
+      frontShort: "Home",
+      report: "Report",
+      reportTitle: "System Report",
       login: "Login",
       logout: "Logout",
       loading: "Loading...",
-      plans: "Plans",
-      orders: "Orders",
+      shortcutSetup: "Add to Home Screen",
+      versionHistory: "Version History",
+
+      // Banner & Community
+      joinLineGroup: "Join Bento Ordering Group",
+      joinLineGroupDesc: "Get ordering updates instantly in real-time",
+
+      // User View Tabs & Plan List
+      plans: "Group Buys",
+      allOrders: "All Orders",
       activePlans: "Active Group Buys",
       selectPlan: "Select a plan to start ordering",
       noActivePlans: "No active group buys at the moment",
+      statusOpen: "Open",
+      diningDate: "Dining Date",
+      closingTime: "Closing Time",
+      unknownStore: "Unknown Store",
+
+      // Detail Order Form
       backToList: "Back to List",
-      step1: "Enter Name or ID",
+      fromStore: "From",
+      step1: "Enter Name or Code",
+      namePlaceholder: "e.g., John or A01",
       step2: "Choose Dish",
       step3: "Quantity",
+      categoryOther: "Other",
       confirmOrder: "Confirm Order",
-      confirmEdit: "Confirm Edit",
-      orderSuccess: "Order Successful!",
-      editSuccess: "Edit Successful!",
+      confirmEdit: "Save Changes",
+      orderSuccess: "Order Placed Successfully!",
+      editSuccess: "Changes Saved Successfully!",
+      currentOrders: "Current Orders",
       myOrder: "Mine",
       paid: "Paid",
       unpaid: "Unpaid",
-      noOrders: "No orders yet",
-      allOrders: "All Orders",
+      noOrders: "No orders placed yet",
+      editOrder: "Edit Order",
+      delete: "Delete",
+
+      // All Orders Tab
+      allOrderDetails: "All Order Details",
+      allOrderDetailsDesc: "View order summaries across all plans",
+      noPlansAvailable: "No plans available",
+      totalOrderers: "Total Orderers",
+      totalQuantity: "Total Quantity",
+      totalAmount: "Total Amount",
+      peopleUnit: "people",
+      itemUnit: "items",
+      colOrderer: "Customer",
+      colDish: "Dish / Item",
+      colQuantity: "Qty",
+      colSubtotal: "Subtotal",
+      colStatus: "Status",
+
+      // User Order Edit Modal
+      editOrderTitle: "Edit Order Details",
+      customerNameLabel: "Customer Name",
+      enterNamePlaceholder: "Enter customer name",
+      chooseDish: "Choose Dish",
+      clickToSelect: "Click an item to select",
+      searchDishesPlaceholder: "Search dishes or categories...",
+      noDishesInStore: "No dishes available for this store",
+      noMatchingDishes: "No matching dishes found",
+      orderQuantity: "Order Quantity",
+      estimatedSubtotal: "Estimated Subtotal: ",
+      noDishSelected: "No dish selected",
+      saving: "Saving...",
+      cancel: "Cancel",
+      confirm: "Confirm",
+      save: "Save",
+
+      // Delete Confirmation Modal
+      confirmDeleteTitle: "Confirm Delete?",
+      confirmDeleteDesc: "This action cannot be undone. Are you sure you want to delete this?",
+      confirmDeleteBtn: "Delete",
+
+      // Announcement Modal
+      announcement: "Announcement",
+      iUnderstand: "Got it",
+      updateDate: "Updated: ",
+      versionHistoryTitle: "Version History",
+      viewVersionHistory: "View release notes & history",
+
+      // Report Modal
+      reportModalTitle: "Report Issue",
+      reportContentLabel: "Report Content",
+      reportPlaceholder: "Please enter the issue or suggestion you would like to report...",
+      sendReport: "Send Report",
+
+      // LINE QR Modal
+      joinLineModalTitle: "Join LINE Group",
+      lineGroupLink: "LINE Group Link",
+
+      // Login Modal
+      adminLoginTitle: "Admin Login",
+      accountLabel: "Account",
+      accountPlaceholder: "Enter admin account",
+      passwordLabel: "Password",
+      passwordPlaceholder: "Enter password",
+      passwordLoginBtn: "Sign in with Password",
+      orText: "OR",
+      googleLoginBtn: "Sign in with Google",
+
+      // Summary Modal
+      orderSummaryTitle: "Order Summary",
+      sectionATitle: "Section A - Kitchen Order",
+      sectionBTitle: "Section B - Pickup Checklist",
+      copySectionA: "Copy Section A",
+      copySectionB: "Copy Section B",
+      copyReportContent: "Copy Order Content",
+      copied: "Copied!",
+      copiedToClipboard: "Copied to clipboard!",
+
+      // Shortcut Modal
+      shortcutModalTitle: "Add Shortcut to Home Screen",
+      iosSectionTitle: "iPhone / iPad",
+      androidSectionTitle: "Android System",
+
+      // Web Translate Modal
+      webTranslate: "Page Translate",
+      webTranslateTitle: "Full Page Translation (Includes Dishes)",
+      webTranslateDesc: "Using Google Translate or your browser's built-in translation automatically translates the entire page—including dish names, notes, and store info!",
+      googleTranslateTitle: "Instant Translation (Google Translate)",
+      browserTranslateTitle: "How to use your browser's built-in translation?",
+      chromeMobileTip: "Chrome Mobile: Tap the three dots (⋮) in the top-right corner ➔ Tap 'Translate...'.",
+      safariTip: "iPhone Safari: Tap the 'aA' icon on the left of the address bar ➔ Tap 'Translate Website'.",
+      chromeDesktopTip: "Desktop Chrome / Edge: Right-click anywhere on the page ➔ Select 'Translate to English / Vietnamese...'.",
+      whyTranslateDishes: "💡 Why page translation is better: Standard UI language switchers only translate system buttons. Page translation automatically translates actual dish names (e.g. Pork Chop Rice, Chicken Bento) into your native language!",
+      restoreOriginalText: "Restore Original Chinese",
+
+      // Admin Dashboard Info
       adminTitle: "Admin Dashboard",
-      adminDesc: "Manage stores, dishes, and plans",
+      adminDesc: "Manage stores, dishes, and group buy plans",
       tabPlans: "Plans",
       tabStores: "Stores",
       tabDishes: "Dishes",
       tabOrders: "Orders",
       tabAnnounce: "Announce",
+      tabPermissions: "Permissions",
       addPlan: "Add Plan",
       addStore: "Add Store",
       addDish: "Add Dish",
       updateDish: "Update Dish",
       batchAdd: "Batch Add",
-      edit: "Edit",
-      delete: "Delete",
       category: "Category",
       price: "Price",
       dishName: "Dish Name",
       store: "Store",
-      diningDate: "Dining Date",
-      closingTime: "Closing Time",
       planName: "Plan Name",
       storeName: "Store Name",
       storeDesc: "Store Description",
-      announcement: "Announcement",
-      save: "Save",
-      cancel: "Cancel",
+      edit: "Edit",
     },
     vi: {
-      title: "Cơm Hộp Ngày Lễ",
-      adminBackend: "Quản trị",
-      backToFront: "Trang chủ",
+      // Header & Navigation
+      title: "Cơm Hộp Ngày Nghỉ",
+      adminBackend: "Trang Quản Trị",
+      backToFront: "Về Trang Chủ",
+      adminShort: "Quản trị",
+      frontShort: "Trang chủ",
+      report: "Báo cáo",
+      reportTitle: "Báo cáo sự cố",
       login: "Đăng nhập",
       logout: "Đăng xuất",
       loading: "Đang tải...",
-      plans: "Kế hoạch",
-      orders: "Đơn hàng",
-      activePlans: "Đang diễn ra",
+      shortcutSetup: "Cài đặt phím tắt",
+      versionHistory: "Lịch sử phiên bản",
+
+      // Banner & Community
+      joinLineGroup: "Tham gia nhóm LINE Đặt Cơm",
+      joinLineGroupDesc: "Nhận thông tin đặt món mới nhất ngay tức thì",
+
+      // User View Tabs & Plan List
+      plans: "Kế hoạch gom đơn",
+      allOrders: "Tất cả đơn hàng",
+      activePlans: "Đang mở đặt món",
       selectPlan: "Chọn một kế hoạch để bắt đầu đặt hàng",
-      noActivePlans: "Hiện không có kế hoạch nào",
+      noActivePlans: "Hiện không có đơn gom nào đang diễn ra",
+      statusOpen: "Đang mở",
+      diningDate: "Ngày dùng bữa",
+      closingTime: "Hạn đặt món",
+      unknownStore: "Cửa hàng chưa rõ",
+
+      // Detail Order Form
       backToList: "Quay lại danh sách",
-      step1: "Nhập tên hoặc ID",
+      fromStore: "Từ",
+      step1: "Nhập tên hoặc mã",
+      namePlaceholder: "VD: Nguyễn Văn A hoặc A01",
       step2: "Chọn món",
       step3: "Số lượng",
+      categoryOther: "Khác",
       confirmOrder: "Xác nhận đặt hàng",
       confirmEdit: "Xác nhận sửa",
       orderSuccess: "Đặt hàng thành công!",
       editSuccess: "Sửa thành công!",
+      currentOrders: "Chi tiết đơn hiện tại",
       myOrder: "Của tôi",
       paid: "Đã thanh toán",
       unpaid: "Chưa thanh toán",
-      noOrders: "Chưa có đơn hàng nào",
-      allOrders: "Tất cả đơn hàng",
+      noOrders: "Hiện chưa có ai đặt món",
+      editOrder: "Sửa đơn hàng",
+      delete: "Xóa",
+
+      // All Orders Tab
+      allOrderDetails: "Tất cả đơn hàng chi tiết",
+      allOrderDetailsDesc: "Xem tình hình đặt món theo từng kế hoạch",
+      noPlansAvailable: "Hiện không có bất kỳ kế hoạch nào",
+      totalOrderers: "Tổng số người đặt",
+      totalQuantity: "Tổng số phần",
+      totalAmount: "Tổng tiền",
+      peopleUnit: "người",
+      itemUnit: "phần",
+      colOrderer: "Người đặt",
+      colDish: "Món ăn",
+      colQuantity: "SL",
+      colSubtotal: "Tạm tính",
+      colStatus: "Trạng thái",
+
+      // User Order Edit Modal
+      editOrderTitle: "Sửa chi tiết đơn hàng",
+      customerNameLabel: "Tên người đặt",
+      enterNamePlaceholder: "Vui lòng nhập tên",
+      chooseDish: "Chọn món ăn",
+      clickToSelect: "Bấm vào món để chọn",
+      searchDishesPlaceholder: "Tìm nhanh món ăn hoặc phân loại...",
+      noDishesInStore: "Cửa hàng này chưa có món ăn nào",
+      noMatchingDishes: "Không tìm thấy món ăn phù hợp",
+      orderQuantity: "Số lượng mua",
+      estimatedSubtotal: "Tạm tính dự kiến: ",
+      noDishSelected: "Chưa chọn món nào",
+      saving: "Đang lưu...",
+      cancel: "Hủy",
+      confirm: "Xác nhận",
+      save: "Lưu",
+
+      // Delete Confirmation Modal
+      confirmDeleteTitle: "Xác nhận xóa?",
+      confirmDeleteDesc: "Hành động này không thể hoàn tác, bạn có chắc muốn xóa?",
+      confirmDeleteBtn: "Xác nhận xóa",
+
+      // Announcement Modal
+      announcement: "Thông báo",
+      iUnderstand: "Tôi đã hiểu",
+      updateDate: "Ngày cập nhật: ",
+      versionHistoryTitle: "Lịch sử phiên bản",
+      viewVersionHistory: "Xem lịch sử cập nhật",
+
+      // Report Modal
+      reportModalTitle: "Báo cáo sự cố",
+      reportContentLabel: "Nội dung báo cáo",
+      reportPlaceholder: "Vui lòng nhập sự cố hoặc góp ý của bạn...",
+      sendReport: "Gửi báo cáo",
+
+      // LINE QR Modal
+      joinLineModalTitle: "Tham gia nhóm LINE",
+      lineGroupLink: "Liên kết nhóm LINE",
+
+      // Login Modal
+      adminLoginTitle: "Đăng nhập quản trị",
+      accountLabel: "Tài khoản",
+      accountPlaceholder: "Nhập tài khoản quản trị",
+      passwordLabel: "Mật khẩu",
+      passwordPlaceholder: "Nhập mật khẩu",
+      passwordLoginBtn: "Đăng nhập bằng mật khẩu",
+      orText: "HOẶC",
+      googleLoginBtn: "Đăng nhập bằng Google",
+
+      // Summary Modal
+      orderSummaryTitle: "Tổng hợp chi tiết đơn hàng",
+      sectionATitle: "Khu A - Dành cho báo đơn",
+      sectionBTitle: "Khu B - Đối chiếu nhận món",
+      copySectionA: "Sao chép Khu A",
+      copySectionB: "Sao chép Khu B",
+      copyReportContent: "Sao chép nội dung báo đơn",
+      copied: "Đã sao chép!",
+      copiedToClipboard: "Đã sao chép vào bộ nhớ tạm!",
+
+      // Shortcut Modal
+      shortcutModalTitle: "Cách thêm lối tắt vào màn hình chính",
+      iosSectionTitle: "iPhone / iPad",
+      androidSectionTitle: "Hệ điều hành Android",
+
+      // Web Translate Modal
+      webTranslate: "Dịch trang web",
+      webTranslateTitle: "Dịch toàn bộ trang web (Bao gồm món ăn)",
+      webTranslateDesc: "Sử dụng Google Dịch hoặc tính năng dịch của trình duyệt sẽ tự động dịch toàn bộ trang web — bao gồm cả tên món ăn, quán ăn và ghi chú!",
+      googleTranslateTitle: "Chuyển ngôn ngữ ngay (Google Dịch)",
+      browserTranslateTitle: "Cách dùng tính năng dịch trên điện thoại / máy tính?",
+      chromeMobileTip: "Chrome trên điện thoại: Nhấn vào biểu tượng ba chấm (⋮) góc trên bên phải ➔ Chọn 'Dịch...'.",
+      safariTip: "Safari trên iPhone: Nhấn vào biểu tượng 'aA' bên trái thanh địa chỉ ➔ Chọn 'Dịch trang web'.",
+      chromeDesktopTip: "Chrome / Edge trên máy tính: Nhấp chuột phải vào bất kỳ khoảng trống nào ➔ Chọn 'Dịch sang Tiếng Việt'.",
+      whyTranslateDishes: "💡 Tại sao dịch trang web tiện lợi hơn? Tính năng này sẽ tự động dịch tất cả tên món ăn (ví dụ: cơm sườn, cơm gà, món phụ...) sang tiếng mẹ đẻ của bạn!",
+      restoreOriginalText: "Khôi phục tiếng Trung gốc",
+
+      // Admin Dashboard Info
       adminTitle: "Bảng điều khiển quản trị",
-      adminDesc: "Quản lý cửa hàng, món ăn và kế hoạch",
+      adminDesc: "Quản lý cửa hàng, món ăn và kế hoạch đặt món",
       tabPlans: "Kế hoạch",
       tabStores: "Cửa hàng",
       tabDishes: "Món ăn",
       tabOrders: "Đơn hàng",
       tabAnnounce: "Thông báo",
+      tabPermissions: "Phân quyền",
       addPlan: "Thêm kế hoạch",
       addStore: "Thêm cửa hàng",
       addDish: "Thêm món",
       updateDish: "Cập nhật món",
       batchAdd: "Thêm hàng loạt",
-      edit: "Sửa",
-      delete: "Xóa",
       category: "Phân loại",
       price: "Giá",
       dishName: "Tên món",
       store: "Cửa hàng",
-      diningDate: "Ngày ăn",
-      closingTime: "Thời gian đóng",
       planName: "Tên kế hoạch",
       storeName: "Tên cửa hàng",
       storeDesc: "Mô tả cửa hàng",
-      announcement: "Thông báo",
-      save: "Lưu",
-      cancel: "Hủy",
+      edit: "Sửa",
     }
   };
 
@@ -583,6 +933,35 @@ function AppContent() {
   const [reportText, setReportText] = useState('');
   const [reportPlanId, setReportPlanId] = useState<string | null>(null);
   const [showShortcutModal, setShowShortcutModal] = useState(false);
+  const [showTranslateModal, setShowTranslateModal] = useState(false);
+
+  const handleTranslatePage = (langCode: string) => {
+    if (langCode === 'zh-TW' || langCode === 'zh') {
+      document.cookie = 'googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+      document.cookie = `googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; domain=${window.location.hostname}; path=/;`;
+      const select = document.querySelector<HTMLSelectElement>('.goog-te-combo');
+      if (select) {
+        select.value = '';
+        select.dispatchEvent(new Event('change'));
+      }
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
+      return;
+    }
+
+    document.cookie = `googtrans=/zh-TW/${langCode}; path=/;`;
+    document.cookie = `googtrans=/zh-TW/${langCode}; domain=${window.location.hostname}; path=/;`;
+    const select = document.querySelector<HTMLSelectElement>('.goog-te-combo');
+    if (select) {
+      select.value = langCode;
+      select.dispatchEvent(new Event('change'));
+    } else {
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
+    }
+  };
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -1893,14 +2272,14 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                     setShowReportModal(true);
                   }}
                   className="flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-orange-600 transition-colors px-1"
-                  title="系統回報"
+                  title={t('reportTitle')}
                 >
                   <AlertCircle className="w-4 h-4" />
-                  <span className="hidden sm:inline">回報</span>
+                  <span className="hidden sm:inline">{t('report')}</span>
                 </button>
                 <select 
                   value={language} 
-                  onChange={(e) => setLanguage(e.target.value as any)}
+                  onChange={(e) => handleLanguageChange(e.target.value as any)}
                   className="bg-transparent text-xs font-bold border-none focus:ring-0 cursor-pointer px-1 text-zinc-700"
                 >
                   <option value="zh">繁中</option>
@@ -1917,9 +2296,9 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                       className="flex items-center gap-1.5 text-xs sm:text-sm font-medium text-zinc-600 hover:text-orange-600 transition-colors"
                     >
                       {view === 'user' ? (
-                        <><Settings className="w-4 h-4" /> <span className="hidden sm:inline">{t('adminBackend')}</span><span className="sm:hidden">後台</span></>
+                        <><Settings className="w-4 h-4" /> <span className="hidden sm:inline">{t('adminBackend')}</span><span className="sm:hidden">{t('adminShort')}</span></>
                       ) : (
-                        <><ArrowLeft className="w-4 h-4" /> <span className="hidden sm:inline">{t('backToFront')}</span><span className="sm:hidden">前台</span></>
+                        <><ArrowLeft className="w-4 h-4" /> <span className="hidden sm:inline">{t('backToFront')}</span><span className="sm:hidden">{t('frontShort')}</span></>
                       )}
                     </button>
                   )}
@@ -1951,19 +2330,30 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
             <button 
               onClick={() => setShowShortcutModal(true)}
               className="flex items-center gap-1.5 text-xs font-medium text-zinc-600 hover:text-orange-600 transition-colors bg-zinc-100/80 hover:bg-zinc-200/80 px-2.5 py-1 rounded-full"
-              title="捷徑設置"
+              title={t('shortcutSetup')}
             >
               <Smartphone className="w-3.5 h-3.5 text-orange-600" />
-              <span>捷徑設置</span>
+              <span>{t('shortcutSetup')}</span>
             </button>
             
-            <button 
-              onClick={() => setShowVersionHistory(true)}
-              className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100/80 px-2 py-0.5 rounded hover:bg-zinc-200 hover:text-zinc-600 transition-colors"
-              title="版本歷史"
-            >
-              {APP_VERSION}
-            </button>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setShowTranslateModal(true)}
+                className="flex items-center gap-1.5 text-xs font-semibold text-orange-700 hover:text-orange-800 transition-colors bg-orange-50/90 hover:bg-orange-100/90 px-2.5 py-1 rounded-full border border-orange-200/70 shadow-2xs"
+                title={t('webTranslate')}
+              >
+                <Languages className="w-3.5 h-3.5 text-orange-600" />
+                <span>{t('webTranslate')}</span>
+              </button>
+
+              <button 
+                onClick={() => setShowVersionHistory(true)}
+                className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100/80 px-2 py-0.5 rounded hover:bg-zinc-200 hover:text-zinc-600 transition-colors"
+                title={t('versionHistory')}
+              >
+                {APP_VERSION}
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -2008,8 +2398,8 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                     </div>
                     <div className="flex items-center gap-3 bg-green-50 px-4 py-2 rounded-xl border border-green-100">
                       <div className="flex flex-col">
-                        <span className="text-xs font-bold text-green-800">加入 假日就是要訂便當 群組</span>
-                        <span className="text-xs font-medium text-green-700">可在第一時間獲取訂餐資訊</span>
+                        <span className="text-xs font-bold text-green-800">{t('joinLineGroup')}</span>
+                        <span className="text-xs font-medium text-green-700">{t('joinLineGroupDesc')}</span>
                         <a href="https://line.me/ti/g/m3gcXBWuM3" target="_blank" rel="noreferrer" className="text-xs font-mono font-medium text-blue-600 hover:underline">https://line.me/ti/g/m3gcXBWuM3</a>
                       </div>
                       <div 
@@ -2047,12 +2437,12 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                                 <div className="w-6 h-6 rounded-full bg-zinc-100 -zinc-800 flex items-center justify-center">
                                   <Store className="w-3.5 h-3.5" />
                                 </div>
-                                <span className="font-medium">{store?.name || '未知店家'}</span>
+                                <span className="font-medium">{store?.name || t('unknownStore')}</span>
                               </div>
                             </div>
                             <div className="flex bg-orange-50 -orange-900/20 rounded-full divide-x divide-orange-200 overflow-hidden border border-orange-100">
                               <div className="text-orange-700 px-3.5 py-1.5 text-[10px] font-black uppercase tracking-wider flex items-center justify-center">
-                                進行中
+                                {t('statusOpen')}
                               </div>
                               <button 
                                 onClick={(e) => {
@@ -2061,23 +2451,23 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                                   setShowReportModal(true);
                                 }}
                                 className="text-orange-600 hover:bg-orange-100 hover:text-orange-800 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition-colors flex items-center justify-center"
-                                title="問題回報"
+                                title={t('reportModalTitle')}
                               >
-                                回報
+                                {t('report')}
                               </button>
                             </div>
                           </div>
                           
                           <div className="grid grid-cols-2 gap-6 pt-6 border-t border-zinc-50 -zinc-800">
                             <div className="space-y-1.5">
-                              <div className="text-[10px] uppercase tracking-widest text-zinc-400 -zinc-500 font-black">用餐日期</div>
+                              <div className="text-[10px] uppercase tracking-widest text-zinc-400 -zinc-500 font-black">{t('diningDate')}</div>
                               <div className="flex items-center gap-2 text-sm font-bold">
                                 <Calendar className="w-4 h-4 text-orange-500/60" />
                                 {plan.diningDate}
                               </div>
                             </div>
                             <div className="space-y-1.5">
-                              <div className="text-[10px] uppercase tracking-widest text-zinc-400 -zinc-500 font-black">截止時間</div>
+                              <div className="text-[10px] uppercase tracking-widest text-zinc-400 -zinc-500 font-black">{t('closingTime')}</div>
                               <div className="flex items-center gap-2 text-sm font-bold">
                                 <Clock className="w-4 h-4 text-orange-500/60" />
                                 {format(parseISO(plan.closingTime), 'MM/dd HH:mm')}
@@ -2093,7 +2483,7 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                       <div className="w-16 h-16 bg-zinc-100 rounded-full flex items-center justify-center mx-auto">
                         <Utensils className="w-8 h-8 text-zinc-300" />
                       </div>
-                      <p className="text-zinc-400 font-medium">目前沒有進行中的團購</p>
+                      <p className="text-zinc-400 font-medium">{t('noActivePlans')}</p>
                     </div>
                   )}
                 </div>
@@ -2104,13 +2494,13 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                   onClick={() => setSelectedPlan(null)}
                   className="flex items-center gap-2 text-sm font-medium text-zinc-500 hover:text-zinc-900 transition-colors"
                 >
-                  <ArrowLeft className="w-4 h-4" /> 返回列表
+                  <ArrowLeft className="w-4 h-4" /> {t('backToList')}
                 </button>
 
                 <div className="space-y-6">
                   <div className="space-y-2">
                     <h2 className="text-3xl font-bold">{selectedPlan.name}</h2>
-                    <p className="text-zinc-500">來自 {stores.find(s => s.id === selectedPlan.storeId)?.name}</p>
+                    <p className="text-zinc-500">{t('fromStore')} {stores.find(s => s.id === selectedPlan.storeId)?.name || t('unknownStore')}</p>
                   </div>
 
                   <Card className="p-8 space-y-8">
@@ -2118,12 +2508,12 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                     <div className="space-y-4">
                       <div className="flex items-center gap-2 text-sm font-bold text-zinc-400 uppercase tracking-widest">
                         <span className="w-6 h-6 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500">1</span>
-                        輸入姓名或代號
+                        {t('step1')}
                       </div>
                       <Input 
                         value={userName}
                         onChange={setUserName}
-                        placeholder="例如：王小明 或 A01"
+                        placeholder={t('namePlaceholder')}
                         className="max-w-md"
                       />
                     </div>
@@ -2140,18 +2530,18 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                           <div className="space-y-4">
                             <div className="flex items-center gap-2 text-sm font-black text-zinc-400 -zinc-500 uppercase tracking-widest">
                               <span className="w-6 h-6 rounded-full bg-zinc-100 -zinc-800 flex items-center justify-center text-zinc-500">2</span>
-                              選擇菜色
+                              {t('step2')}
                             </div>
                             <div className="space-y-8">
                               {(() => {
                                 const storeDishes = dishes.filter(d => d.storeId === selectedPlan.storeId);
-                                const categories = Array.from(new Set(storeDishes.map(d => d.category || '其它')));
+                                const categories = Array.from(new Set(storeDishes.map(d => d.category || t('categoryOther'))));
                                 
                                 return categories.map(cat => (
                                   <div key={cat} className="space-y-3">
                                     <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider pl-1">{cat}</h4>
                                     <div className="grid grid-cols-1 gap-3">
-                                      {storeDishes.filter(d => (d.category || '其它') === cat).map(dish => (
+                                      {storeDishes.filter(d => (d.category || t('categoryOther')) === cat).map(dish => (
                                         <div 
                                           key={dish.id}
                                           onClick={() => setSelectedDish(dish)}
@@ -2178,7 +2568,7 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                           <div className="space-y-4">
                             <div className="flex items-center gap-2 text-sm font-black text-zinc-400 -zinc-500 uppercase tracking-widest">
                               <span className="w-6 h-6 rounded-full bg-zinc-100 -zinc-800 flex items-center justify-center text-zinc-500">3</span>
-                              數量
+                              {t('step3')}
                             </div>
                             <div className="flex items-center gap-6">
                               <div className="flex items-center bg-zinc-100 -zinc-800 p-1 rounded-2xl border border-zinc-200 -zinc-700">
@@ -2208,9 +2598,9 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                             >
                               {orderSuccess ? (
                                 <span className="flex items-center justify-center gap-2">
-                                  <CheckCircle2 className="w-5 h-5" /> 訂購成功！
+                                  <CheckCircle2 className="w-5 h-5" /> {t('orderSuccess')}
                                 </span>
-                              ) : '確認訂購'}
+                              ) : t('confirmOrder')}
                             </Button>
                           </div>
                         </motion.div>
@@ -2222,7 +2612,7 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                   <div className="space-y-4">
                     <h3 className="font-bold text-lg flex items-center gap-2">
                       <ShoppingBag className="w-5 h-5 text-zinc-400" />
-                      目前訂單明細
+                      {t('currentOrders')}
                     </h3>
                     <div className="space-y-3">
                       {orders.filter(o => o.planId === selectedPlan.id).map(order => {
@@ -2237,13 +2627,13 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                               <div>
                                 <div className="font-bold flex items-center gap-2">
                                   {order.userName}
-                                  {isMyOrder && <span className="text-[10px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded">我的</span>}
+                                  {isMyOrder && <span className="text-[10px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded">{t('myOrder')}</span>}
                                   {order.isPaid ? (
                                     <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded flex items-center gap-0.5">
-                                      <CheckCircle2 className="w-3 h-3" /> 已付款
+                                      <CheckCircle2 className="w-3 h-3" /> {t('paid')}
                                     </span>
                                   ) : (
-                                    <span className="text-[10px] bg-zinc-100 text-zinc-400 px-1.5 py-0.5 rounded">未付款</span>
+                                    <span className="text-[10px] bg-zinc-100 text-zinc-400 px-1.5 py-0.5 rounded">{t('unpaid')}</span>
                                   )}
                                 </div>
                                 <div className="text-sm text-zinc-500">{dish?.name} x {order.quantity}</div>
@@ -2259,14 +2649,14 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                                   <button 
                                     onClick={() => startEditOrder(order)}
                                     className="p-2 text-zinc-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
-                                    title="修改訂單"
+                                    title={t('editOrder')}
                                   >
                                     <Edit2 className="w-4 h-4" />
                                   </button>
                                   <button 
                                     onClick={() => setConfirmDelete({ col: 'orders', id: order.id })}
                                     className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                    title="刪除"
+                                    title={t('delete')}
                                   >
                                     <Trash2 className="w-4 h-4" />
                                   </button>
@@ -2277,7 +2667,7 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                         );
                       })}
                       {orders.filter(o => o.planId === selectedPlan.id).length === 0 && (
-                        <div className="py-8 text-center text-zinc-400 text-sm">目前尚無人訂購</div>
+                        <div className="py-8 text-center text-zinc-400 text-sm">{t('noOrders')}</div>
                       )}
                     </div>
                   </div>
@@ -2287,8 +2677,8 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
           ) : (
             <div className="space-y-6">
                 <div className="flex flex-col gap-1">
-                  <h2 className="text-2xl font-bold">所有訂單明細</h2>
-                  <p className="text-zinc-500">查看各方案的訂購狀況</p>
+                  <h2 className="text-2xl font-bold">{t('allOrderDetails')}</h2>
+                  <p className="text-zinc-500">{t('allOrderDetailsDesc')}</p>
                 </div>
 
                 {plans.length > 0 && (
@@ -2317,7 +2707,7 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                   {(() => {
                     const sortedPlans = [...plans].sort((a, b) => b.diningDate.localeCompare(a.diningDate));
                     const activePlanId = selectedAllOrdersPlanId || (sortedPlans.length > 0 ? sortedPlans[0].id : null);
-                    if (!activePlanId) return <div className="py-20 text-center text-zinc-400">目前沒有任何方案</div>;
+                    if (!activePlanId) return <div className="py-20 text-center text-zinc-400">{t('noPlansAvailable')}</div>;
                     
                     const plan = plans.find(p => p.id === activePlanId);
                     if (!plan) return null;
@@ -2343,15 +2733,15 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                           </div>
                           <div className="flex gap-6 text-right">
                             <div>
-                              <div className="text-[10px] uppercase font-bold text-zinc-400">總訂購人數</div>
-                              <div className="text-lg font-bold text-zinc-700">{uniqueUsers} 人</div>
+                              <div className="text-[10px] uppercase font-bold text-zinc-400">{t('totalOrderers')}</div>
+                              <div className="text-lg font-bold text-zinc-700">{uniqueUsers} {t('peopleUnit')}</div>
                             </div>
                             <div>
-                              <div className="text-[10px] uppercase font-bold text-zinc-400">總訂購數量</div>
-                              <div className="text-lg font-bold text-zinc-700">{totalQuantity} 份</div>
+                              <div className="text-[10px] uppercase font-bold text-zinc-400">{t('totalQuantity')}</div>
+                              <div className="text-lg font-bold text-zinc-700">{totalQuantity} {t('itemUnit')}</div>
                             </div>
                             <div>
-                              <div className="text-[10px] uppercase font-bold text-zinc-400">總金額</div>
+                              <div className="text-[10px] uppercase font-bold text-zinc-400">{t('totalAmount')}</div>
                               <div className="text-lg font-bold text-orange-600">${totalAmount}</div>
                             </div>
                           </div>
@@ -2360,11 +2750,11 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="border-b border-zinc-50">
-                                <th className="px-6 py-3 text-left font-bold text-zinc-400 uppercase text-[10px]">訂購人</th>
-                                <th className="px-6 py-3 text-left font-bold text-zinc-400 uppercase text-[10px]">餐點</th>
-                                <th className="px-6 py-3 text-center font-bold text-zinc-400 uppercase text-[10px]">數量</th>
-                                <th className="px-6 py-3 text-right font-bold text-zinc-400 uppercase text-[10px]">小計</th>
-                                <th className="px-6 py-3 text-center font-bold text-zinc-400 uppercase text-[10px]">狀態</th>
+                                <th className="px-6 py-3 text-left font-bold text-zinc-400 uppercase text-[10px]">{t('colOrderer')}</th>
+                                <th className="px-6 py-3 text-left font-bold text-zinc-400 uppercase text-[10px]">{t('colDish')}</th>
+                                <th className="px-6 py-3 text-center font-bold text-zinc-400 uppercase text-[10px]">{t('colQuantity')}</th>
+                                <th className="px-6 py-3 text-right font-bold text-zinc-400 uppercase text-[10px]">{t('colSubtotal')}</th>
+                                <th className="px-6 py-3 text-center font-bold text-zinc-400 uppercase text-[10px]">{t('colStatus')}</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-zinc-50">
@@ -2379,11 +2769,11 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                                     <td className="px-6 py-4 text-center">
                                       {order.isPaid ? (
                                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-600 text-[10px] font-bold">
-                                          <CheckCircle2 className="w-3 h-3" /> 已付款
+                                          <CheckCircle2 className="w-3 h-3" /> {t('paid')}
                                         </span>
                                       ) : (
                                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-400 text-[10px] font-bold">
-                                          未付款
+                                          {t('unpaid')}
                                         </span>
                                       )}
                                     </td>
@@ -2391,7 +2781,7 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                                 );
                               }) : (
                                 <tr>
-                                  <td colSpan={5} className="px-6 py-8 text-center text-zinc-400">目前沒有任何訂單</td>
+                                  <td colSpan={5} className="px-6 py-8 text-center text-zinc-400">{t('noOrders')}</td>
                                 </tr>
                               )}
                             </tbody>
@@ -2409,8 +2799,8 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
             {/* Admin View */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div className="space-y-1">
-                <h2 className="text-3xl font-display font-black tracking-tight">管理後台</h2>
-                <p className="text-zinc-500 font-medium">管理店家、菜色與團購方案</p>
+                <h2 className="text-3xl font-display font-black tracking-tight">{t('adminTitle')}</h2>
+                <p className="text-zinc-500 font-medium">{t('adminDesc')}</p>
               </div>
               <div className="flex bg-zinc-100 -zinc-800 p-1 rounded-xl border border-zinc-200 -zinc-700 overflow-x-auto max-w-full">
                 {(['plans', 'stores', 'dishes', 'orders', 'announcement', ...(isSuperAdmin ? ['permissions'] : [])] as const).map(tab => {
@@ -2424,12 +2814,12 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                         adminTab === tab ? "bg-white -zinc-700 text-orange-600 -orange-400 shadow-sm" : "text-zinc-500 hover:text-zinc-900 -zinc-300"
                       )}
                     >
-                      {tab === 'plans' && '方案'}
-                      {tab === 'stores' && '店家'}
-                      {tab === 'dishes' && '菜色'}
-                      {tab === 'orders' && '訂單'}
-                      {tab === 'announcement' && '公告'}
-                      {tab === 'permissions' && '管理權限'}
+                      {tab === 'plans' && t('tabPlans')}
+                      {tab === 'stores' && t('tabStores')}
+                      {tab === 'dishes' && t('tabDishes')}
+                      {tab === 'orders' && t('tabOrders')}
+                      {tab === 'announcement' && t('tabAnnounce')}
+                      {tab === 'permissions' && t('tabPermissions')}
                     </button>
                   );
                 })}
@@ -3836,7 +4226,7 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
               className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col"
             >
               <div className="p-6 border-b border-zinc-100 flex justify-between items-center">
-                <h3 className="font-bold text-xl text-zinc-900">管理員登入</h3>
+                <h3 className="font-bold text-xl text-zinc-900">{t('adminLoginTitle')}</h3>
                 <button onClick={() => setShowLoginModal(false)} className="p-2 text-zinc-400 hover:text-zinc-600 rounded-full hover:bg-zinc-100 transition-colors">
                   <X className="w-5 h-5" />
                 </button>
@@ -3848,16 +4238,16 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                   </div>
                 )}
                 <form onSubmit={handleEmailLogin} className="space-y-4">
-                  <Input label="帳號" value={loginEmail} onChange={setLoginEmail} placeholder="輸入管理員帳號" />
-                  <Input label="密碼" value={loginPassword} onChange={setLoginPassword} placeholder="輸入密碼" type="password" />
-                  <Button type="submit" className="w-full py-3">帳號密碼登入</Button>
+                  <Input label={t('accountLabel')} value={loginEmail} onChange={setLoginEmail} placeholder={t('accountPlaceholder')} />
+                  <Input label={t('passwordLabel')} value={loginPassword} onChange={setLoginPassword} placeholder={t('passwordPlaceholder')} type="password" />
+                  <Button type="submit" className="w-full py-3">{t('passwordLoginBtn')}</Button>
                 </form>
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
                     <div className="w-full border-t border-zinc-200"></div>
                   </div>
                   <div className="relative flex justify-center text-sm">
-                    <span className="px-2 bg-white text-zinc-500">或</span>
+                    <span className="px-2 bg-white text-zinc-500">{t('orText')}</span>
                   </div>
                 </div>
                 <Button onClick={handleGoogleLogin} variant="outline" className="w-full py-3 flex items-center justify-center gap-2">
@@ -3867,7 +4257,7 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                     <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
                     <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                   </svg>
-                  Google 登入
+                  {t('googleLoginBtn')}
                 </Button>
               </div>
             </motion.div>
@@ -3906,13 +4296,13 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                   className="flex-1 py-3" 
                   onClick={() => setConfirmAction(null)}
                 >
-                  取消
+                  {t('cancel')}
                 </Button>
                 <Button 
                   className="flex-1 py-3" 
                   onClick={confirmAction.onConfirm}
                 >
-                  確定
+                  {t('confirm')}
                 </Button>
               </div>
             </motion.div>
@@ -3959,7 +4349,7 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                       <span>{APP_VERSION}</span>
                     </button>
                     <span className="text-xs text-zinc-400 font-medium">
-                      更新日期：<span className="font-mono text-zinc-600 font-semibold">{APP_UPDATE_DATE}</span>
+                      {t('updateDate')}：<span className="font-mono text-zinc-600 font-semibold">{APP_UPDATE_DATE}</span>
                     </span>
                   </div>
                 </div>
@@ -3979,7 +4369,7 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
               
               <div className="space-y-3">
                 <Button onClick={() => setShowAnnouncement(false)} className="w-full py-4 text-lg">
-                  我知道了
+                  {t('iUnderstand')}
                 </Button>
                 <div className="flex justify-center">
                   <button
@@ -3987,9 +4377,9 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                     onClick={() => setShowVersionHistory(true)}
                     className="text-xs text-zinc-400 hover:text-orange-600 transition-colors flex items-center gap-1.5 py-0.5"
                   >
-                    <span>版本 {APP_VERSION} ({APP_UPDATE_DATE})</span>
+                    <span>{t('tabPlans')} {APP_VERSION} ({APP_UPDATE_DATE})</span>
                     <span className="text-zinc-300">·</span>
-                    <span className="underline underline-offset-2">查看版本更新紀錄</span>
+                    <span className="underline underline-offset-2">{t('viewVersionHistory')}</span>
                   </button>
                 </div>
               </div>
@@ -4020,8 +4410,8 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                 <AlertCircle className="w-8 h-8 text-red-500" />
               </div>
               <div className="text-center space-y-2">
-                <h3 className="text-2xl font-display font-black tracking-tight">確認刪除？</h3>
-                <p className="text-zinc-500 -zinc-400 font-medium">此操作無法復原，確定要刪除這筆資料嗎？</p>
+                <h3 className="text-2xl font-display font-black tracking-tight">{t('confirmDeleteTitle')}</h3>
+                <p className="text-zinc-500 -zinc-400 font-medium">{t('confirmDeleteDesc')}</p>
               </div>
               <div className="flex gap-3">
                 <Button 
@@ -4029,14 +4419,14 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                   className="flex-1 py-3" 
                   onClick={() => setConfirmDelete(null)}
                 >
-                  取消
+                  {t('cancel')}
                 </Button>
                 <Button 
                   variant="danger" 
                   className="flex-1 py-3" 
                   onClick={() => deleteItem(confirmDelete.col, confirmDelete.id)}
                 >
-                  確定刪除
+                  {t('confirmDeleteBtn')}
                 </Button>
               </div>
             </motion.div>
@@ -4064,7 +4454,7 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
             >
               <div className="flex justify-between items-center p-6 pb-4 border-b border-zinc-100">
                 <h3 className="text-xl font-bold flex items-center gap-2">
-                  <span className="text-green-600 font-bold">加入 LINE 群組</span>
+                  <span className="text-green-600 font-bold">{t('joinLineModalTitle')}</span>
                 </h3>
                 <button onClick={() => setShowQrModal(false)} className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-500">
                   <X className="w-5 h-5" />
@@ -4083,7 +4473,7 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                   />
                 </div>
                 <div className="text-center space-y-1">
-                  <p className="text-sm text-zinc-500 font-medium">LINE 群組連結</p>
+                  <p className="text-sm text-zinc-500 font-medium">{t('lineGroupLink')}</p>
                   <a href="https://line.me/ti/g/m3gcXBWuM3" target="_blank" rel="noreferrer" className="text-base sm:text-lg font-mono font-bold tracking-tight text-blue-600 hover:underline break-all block px-4">https://line.me/ti/g/m3gcXBWuM3</a>
                 </div>
               </div>
@@ -4112,7 +4502,7 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-bold flex items-center gap-2">
                   <Globe className="w-5 h-5 text-orange-600" />
-                  版本歷史紀錄
+                  {t('versionHistoryTitle')}
                 </h3>
                 <button onClick={() => setShowVersionHistory(false)} className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-500">
                   <X className="w-5 h-5" />
@@ -4160,24 +4550,24 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
               className="relative bg-white rounded-3xl shadow-2xl max-w-md w-full p-6"
             >
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold">問題回報</h3>
+                <h3 className="text-xl font-bold">{t('reportModalTitle')}</h3>
                 <button onClick={() => setShowReportModal(false)} className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-500">
                   <X className="w-5 h-5" />
                 </button>
               </div>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-semibold text-zinc-700 mb-1">回報內容</label>
+                  <label className="block text-sm font-semibold text-zinc-700 mb-1">{t('reportContentLabel')}</label>
                   <textarea
                     value={reportText}
                     onChange={(e) => setReportText(e.target.value)}
                     className="w-full px-4 py-3 rounded-xl border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all resize-none h-32"
-                    placeholder="請輸入您想回報的問題或建議..."
+                    placeholder={t('reportPlaceholder')}
                   />
                 </div>
                 <div className="flex gap-3">
-                  <Button variant="outline" className="flex-1 py-3" onClick={() => setShowReportModal(false)}>取消</Button>
-                  <Button className="flex-1 py-3" onClick={submitReport}>發送回報</Button>
+                  <Button variant="outline" className="flex-1 py-3" onClick={() => setShowReportModal(false)}>{t('cancel')}</Button>
+                  <Button className="flex-1 py-3" onClick={submitReport}>{t('sendReport')}</Button>
                 </div>
               </div>
             </motion.div>
@@ -4203,7 +4593,7 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
               className="relative bg-white rounded-3xl shadow-2xl max-w-4xl w-full p-6 sm:p-8 flex flex-col max-h-[90vh] border border-zinc-100"
             >
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-2xl font-bold">訂單明細彙整</h3>
+                <h3 className="text-2xl font-bold">{t('orderSummaryTitle')}</h3>
                 <button onClick={() => setShowSummaryModal(false)} className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-500">
                   <X className="w-5 h-5" />
                 </button>
@@ -4259,7 +4649,7 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                       {/* Section A */}
                       <div className="space-y-3">
                         <div className="flex items-center justify-between border-b pb-2">
-                          <h4 className="font-bold text-lg text-orange-600">A區 - 報單用</h4>
+                          <h4 className="font-bold text-lg text-orange-600">{t('sectionATitle')}</h4>
                           {sortedDishGroups.length > 0 && (
                             <button
                               onClick={() => handleCopySectionA(plan, sortedDishGroups)}
@@ -4269,17 +4659,17 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                                   ? "bg-green-600 text-white"
                                   : "bg-orange-100 hover:bg-orange-200 text-orange-700"
                               )}
-                              title="複製A區報單內容"
+                              title={t('copySectionA')}
                             >
                               {copiedSummaryKey === `A-${plan.id}` ? (
                                 <>
                                   <Check className="w-3.5 h-3.5" />
-                                  已複製到剪貼簿！
+                                  {t('copiedToClipboard')}
                                 </>
                               ) : (
                                 <>
                                   <Copy className="w-3.5 h-3.5" />
-                                  一鍵複製A區
+                                  {t('copySectionA')}
                                 </>
                               )}
                             </button>
@@ -4292,8 +4682,8 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                           {sortedDishGroups.length > 0 && (
                             <div className="mt-4 pt-4 border-t border-zinc-200 font-bold text-orange-600 flex flex-wrap items-center justify-between gap-3">
                               <div>
-                                總數量：{sortedDishGroups.reduce((acc, group) => acc + group.totalQuantity, 0)} 份
-                                <span className="ml-4">總金額：${sortedDishGroups.reduce((acc, group) => acc + (group.dish?.price || 0) * group.totalQuantity, 0)}</span>
+                                {t('totalQuantity')}：{sortedDishGroups.reduce((acc, group) => acc + group.totalQuantity, 0)} {t('itemUnit')}
+                                <span className="ml-4">{t('totalAmount')}：${sortedDishGroups.reduce((acc, group) => acc + (group.dish?.price || 0) * group.totalQuantity, 0)}</span>
                               </div>
                               <button
                                 onClick={() => handleCopySectionA(plan, sortedDishGroups)}
@@ -4307,25 +4697,25 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                                 {copiedSummaryKey === `A-${plan.id}` ? (
                                   <>
                                     <Check className="w-3.5 h-3.5" />
-                                    已複製！
+                                    {t('copied')}
                                   </>
                                 ) : (
                                   <>
                                     <Copy className="w-3.5 h-3.5" />
-                                    複製報單內容
+                                    {t('copyReportContent')}
                                   </>
                                 )}
                               </button>
                             </div>
                           )}
-                          {sortedDishGroups.length === 0 && <div className="text-zinc-400">尚無訂單</div>}
+                          {sortedDishGroups.length === 0 && <div className="text-zinc-400">{t('noOrders')}</div>}
                         </div>
                       </div>
 
                       {/* Section B */}
                       <div className="space-y-3">
                         <div className="flex items-center justify-between border-b pb-2">
-                          <h4 className="font-bold text-lg text-blue-600">B區 - 取餐比對用</h4>
+                          <h4 className="font-bold text-lg text-blue-600">{t('sectionBTitle')}</h4>
                           {sortedDishGroups.length > 0 && (
                             <button
                               onClick={() => handleCopySectionB(plan, sortedDishGroups)}
@@ -4335,17 +4725,17 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                                   ? "bg-green-600 text-white"
                                   : "bg-blue-100 hover:bg-blue-200 text-blue-700"
                               )}
-                              title="複製B區取餐明細"
+                              title={t('copySectionB')}
                             >
                               {copiedSummaryKey === `B-${plan.id}` ? (
                                 <>
                                   <Check className="w-3.5 h-3.5" />
-                                  已複製到剪貼簿！
+                                  {t('copiedToClipboard')}
                                 </>
                               ) : (
                                 <>
                                   <Copy className="w-3.5 h-3.5" />
-                                  複製B區明細
+                                  {t('copySectionB')}
                                 </>
                               )}
                             </button>
@@ -4360,7 +4750,7 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                               </div>
                             </div>
                           ))}
-                          {sortedDishGroups.length === 0 && <div className="text-zinc-400">尚無訂單</div>}
+                          {sortedDishGroups.length === 0 && <div className="text-zinc-400">{t('noOrders')}</div>}
                         </div>
                       </div>
                     </div>
@@ -4497,13 +4887,13 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                     <ShoppingBag className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-zinc-900">修改訂單內容</h3>
+                    <h3 className="text-xl font-bold text-zinc-900">{t('editOrderTitle')}</h3>
                     {(() => {
                       const orderPlan = plans.find(p => p.id === userEditingOrder.planId);
                       const orderStore = stores.find(s => s.id === orderPlan?.storeId);
                       return (
                         <p className="text-xs text-zinc-400 mt-0.5">
-                          {orderPlan?.name || '團購方案'} · {orderStore?.name || '店家'}
+                          {orderPlan?.name || t('tabPlans')} · {orderStore?.name || t('store')}
                         </p>
                       );
                     })()}
@@ -4521,12 +4911,12 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
               <div className="space-y-5 py-4 overflow-y-auto pr-1">
                 {/* User Name */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-zinc-600">訂購人姓名</label>
+                  <label className="text-xs font-bold text-zinc-600">{t('customerNameLabel')}</label>
                   <input
                     type="text"
                     value={userEditUserName}
                     onChange={e => setUserEditUserName(e.target.value)}
-                    placeholder="請輸入姓名"
+                    placeholder={t('enterNamePlaceholder')}
                     className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 text-sm focus:outline-none focus:border-orange-500 font-medium bg-white"
                   />
                 </div>
@@ -4544,8 +4934,8 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                   return (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-zinc-600">選擇餐點</label>
-                        <span className="text-[11px] text-zinc-400">點擊品項即可選取</span>
+                        <label className="text-xs font-bold text-zinc-600">{t('chooseDish')}</label>
+                        <span className="text-[11px] text-zinc-400">{t('clickToSelect')}</span>
                       </div>
 
                       {storeDishes.length > 5 && (
@@ -4554,7 +4944,7 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                             type="text"
                             value={userEditSearchDish}
                             onChange={e => setUserEditSearchDish(e.target.value)}
-                            placeholder="快速搜尋餐點或分類..."
+                            placeholder={t('searchDishesPlaceholder')}
                             className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-zinc-200 focus:outline-none focus:border-orange-500"
                           />
                           <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-2.5" />
@@ -4598,7 +4988,7 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                           })
                         ) : (
                           <div className="py-6 text-center text-xs text-zinc-400">
-                            {storeDishes.length === 0 ? '此店家尚無菜色' : '查無符合的菜色'}
+                            {storeDishes.length === 0 ? t('noDishesInStore') : t('noMatchingDishes')}
                           </div>
                         )}
                       </div>
@@ -4608,7 +4998,7 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
 
                 {/* Quantity */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-zinc-600">購買數量</label>
+                  <label className="text-xs font-bold text-zinc-600">{t('orderQuantity')}</label>
                   <div className="flex items-center bg-zinc-100 p-1 rounded-xl border border-zinc-200 max-w-[200px]">
                     <button 
                       type="button"
@@ -4641,8 +5031,8 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                   return (
                     <div className="p-3.5 bg-orange-50/60 rounded-2xl border border-orange-100 flex items-center justify-between text-sm">
                       <div className="flex items-center gap-1.5 text-zinc-600 text-xs">
-                        <span>預估小計金額：</span>
-                        <span className="text-zinc-400">{currentDish ? `${currentDish.name} × ${userEditQuantity}` : '尚未選取餐點'}</span>
+                        <span>{t('estimatedSubtotal')}</span>
+                        <span className="text-zinc-400">{currentDish ? `${currentDish.name} × ${userEditQuantity}` : t('noDishSelected')}</span>
                       </div>
                       <div className="text-lg font-black text-orange-600 font-mono">
                         ${totalPrice}
@@ -4660,14 +5050,14 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                   onClick={() => setShowUserOrderEditModal(false)}
                   disabled={userEditSaving}
                 >
-                  取消
+                  {t('cancel')}
                 </Button>
                 <Button 
                   className="flex-1 py-2.5 font-bold" 
                   onClick={saveUserOrderEdit}
                   disabled={userEditSaving || !userEditUserName.trim() || !userEditDishId}
                 >
-                  {userEditSaving ? '儲存中...' : '確認修改'}
+                  {userEditSaving ? t('saving') : t('confirm')}
                 </Button>
               </div>
             </motion.div>
@@ -5307,7 +5697,7 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
               className="relative bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-6 sm:p-8 flex flex-col max-h-[90vh] border border-zinc-100 overflow-y-auto"
             >
               <div className="flex justify-between items-center mb-6 sticky top-0 bg-white z-10 pb-2 border-b border-zinc-100">
-                <h3 className="text-2xl font-bold">桌面捷徑設置方式</h3>
+                <h3 className="text-2xl font-bold">{t('shortcutModalTitle')}</h3>
                 <button onClick={() => setShowShortcutModal(false)} className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-500">
                   <X className="w-5 h-5" />
                 </button>
@@ -5316,16 +5706,36 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
               <div className="space-y-8">
                 {/* iOS Section */}
                 <div className="space-y-4">
-                  <h4 className="font-bold text-lg">iphone /ipad</h4>
+                  <h4 className="font-bold text-lg">{t('iosSectionTitle')}</h4>
                   <div className="bg-zinc-50 rounded-xl overflow-hidden border border-zinc-100">
-                    <img src="/dt02.png" alt="iOS 捷徑設定" className="w-full object-contain max-h-64 bg-zinc-100" />
+                    <img src="/dt02.png" alt="iOS Shortcut" className="w-full object-contain max-h-64 bg-zinc-100" />
                   </div>
-                  <div className="space-y-2 text-zinc-700">
-                    <p className="font-medium">📱 簡易操作步驟</p>
-                    <p>📱 1. 開啟網頁，點分享：用 Safari 打開網頁，點底部工具列中央的<strong>「分享」</strong>圖示（向上箭頭）。</p>
-                    <p>👉 2. 找到「加入主畫面」：在彈出的選單中向上滑動，找到並點擊<strong>「加入主畫面」</strong>（帶有「+」號的圖示）。</p>
-                    <p>✏️ 3. 命名 & 點新增：自訂你想要的名稱，然後點擊右上角的<strong>「新增」</strong>。</p>
-                    <p>🎉 4. 完成！快速開啟：主畫面會出現一個新圖示，就像 App 一樣，點擊即可快速開啟該網頁。</p>
+                  <div className="space-y-2 text-zinc-700 text-sm">
+                    {language === 'zh' ? (
+                      <>
+                        <p className="font-medium">📱 簡易操作步驟</p>
+                        <p>📱 1. 開啟網頁，點分享：用 Safari 打開網頁，點底部工具列中央的<strong>「分享」</strong>圖示（向上箭頭）。</p>
+                        <p>👉 2. 找到「加入主畫面」：在彈出的選單中向上滑動，找到並點擊<strong>「加入主畫面」</strong>（帶有「+」號的圖示）。</p>
+                        <p>✏️ 3. 命名 & 點新增：自訂你想要的名稱，然後點擊右上角的<strong>「新增」</strong>。</p>
+                        <p>🎉 4. 完成！快速開啟：主畫面會出現一個新圖示，就像 App 一樣，點擊即可快速開啟該網頁。</p>
+                      </>
+                    ) : language === 'vi' ? (
+                      <>
+                        <p className="font-medium">📱 Các bước thao tác nhanh</p>
+                        <p>📱 1. Mở trang web, nhấn Chia sẻ: Dùng Safari, nhấn biểu tượng <strong>Chia sẻ</strong> (mũi tên hướng lên) ở thanh dưới cùng.</p>
+                        <p>👉 2. Chọn "Thêm vào MH chính": Tìm và nhấn vào <strong>Thêm vào MH chính</strong> (biểu tượng dấu +).</p>
+                        <p>✏️ 3. Đặt tên & nhấn Thêm: Đặt tên bạn muốn rồi nhấn <strong>Thêm</strong> ở góc trên bên phải.</p>
+                        <p>🎉 4. Hoàn tất! Biểu tượng sẽ xuất hiện trên màn hình chính như một ứng dụng.</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-medium">📱 Quick Steps</p>
+                        <p>📱 1. Open web page, tap Share: In Safari, tap the <strong>Share</strong> icon (arrow pointing up) at the bottom toolbar.</p>
+                        <p>👉 2. Tap "Add to Home Screen": In the share menu, find and tap <strong>Add to Home Screen</strong> (+ icon).</p>
+                        <p>✏️ 3. Name & tap Add: Name your shortcut, then tap <strong>Add</strong> at top right.</p>
+                        <p>🎉 4. Done! Quick launch: An icon will appear on your home screen like an app.</p>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -5333,17 +5743,140 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
 
                 {/* Android Section */}
                 <div className="space-y-4">
-                  <h4 className="font-bold text-lg">安卓系統</h4>
+                  <h4 className="font-bold text-lg">{t('androidSectionTitle')}</h4>
                   <div className="bg-zinc-50 rounded-xl overflow-hidden border border-zinc-100">
-                    <img src="/dt01.png" alt="Android 捷徑設定" className="w-full object-contain max-h-64 bg-zinc-100" />
+                    <img src="/dt01.png" alt="Android Shortcut" className="w-full object-contain max-h-64 bg-zinc-100" />
                   </div>
-                  <div className="space-y-2 text-zinc-700">
-                    <p className="font-medium">📱 Android 操作步驟文字版：</p>
-                    <p>📱 1. 開啟網頁，點「更多」：用 Chrome 打開網頁，點網址列右側的<strong>「三個點」</strong>（更多）圖示。</p>
-                    <p>👉 2. 找到「加到主畫面」：在選單中向下滑動，找到並點擊<strong>「加到主畫面」</strong>。</p>
-                    <p>✏️ 3. 命名 & 點「新增」：自訂捷徑名稱，然後點擊<strong>「新增」</strong>。</p>
-                    <p>🎉 4. 完成！快速開啟：主畫面會出現該網頁的捷徑圖示。</p>
+                  <div className="space-y-2 text-zinc-700 text-sm">
+                    {language === 'zh' ? (
+                      <>
+                        <p className="font-medium">📱 Android 操作步驟文字版：</p>
+                        <p>📱 1. 開啟網頁，點「更多」：用 Chrome 打開網頁，點網址列右側的<strong>「三個點」</strong>（更多）圖示。</p>
+                        <p>👉 2. 找到「加到主畫面」：在選單中向下滑動，找到並點擊<strong>「加到主畫面」</strong>。</p>
+                        <p>✏️ 3. 命名 & 點「新增」：自訂捷徑名稱，然後點擊<strong>「新增」</strong>。</p>
+                        <p>🎉 4. 完成！快速開啟：主畫面會出現該網頁的捷徑圖示。</p>
+                      </>
+                    ) : language === 'vi' ? (
+                      <>
+                        <p className="font-medium">📱 Hướng dẫn cho Android:</p>
+                        <p>📱 1. Mở trang web, nhấn "Thêm": Dùng Chrome, nhấn biểu tượng <strong>ba dấu chấm</strong> ở góc trên bên phải.</p>
+                        <p>👉 2. Chọn "Thêm vào màn hình chính": Trong menu thả xuống, nhấn <strong>Thêm vào màn hình chính</strong>.</p>
+                        <p>✏️ 3. Đặt tên & nhấn "Thêm": Tùy chỉnh tên rồi nhấn <strong>Thêm</strong>.</p>
+                        <p>🎉 4. Hoàn tất! Biểu tượng lối tắt sẽ xuất hiện trên màn hình chính.</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-medium">📱 Android Instructions:</p>
+                        <p>📱 1. Open web page, tap More: In Chrome, tap the <strong>three dots</strong> menu icon in the top right.</p>
+                        <p>👉 2. Find "Add to Home screen": In the menu, find and tap <strong>Add to Home screen</strong>.</p>
+                        <p>✏️ 3. Name & tap "Add": Customize the name, then tap <strong>Add</strong>.</p>
+                        <p>🎉 4. Done! Quick launch: An icon will appear on your home screen.</p>
+                      </>
+                    )}
                   </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Web Translate Modal */}
+        {showTranslateModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 sm:p-8 flex flex-col max-h-[90vh] border border-zinc-100 overflow-y-auto"
+            >
+              <div className="flex justify-between items-start mb-5 sticky top-0 bg-white z-10 pb-2 border-b border-zinc-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-orange-100 flex items-center justify-center text-orange-600 shrink-0">
+                    <Languages className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-zinc-900">{t('webTranslateTitle')}</h3>
+                    <p className="text-xs text-zinc-500 mt-0.5">{t('webTranslateDesc')}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowTranslateModal(false)} 
+                  className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-400 hover:text-zinc-700 shrink-0 ml-2 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-6 text-sm">
+                {/* Highlight Notice */}
+                <div className="p-4 bg-orange-50/90 rounded-2xl border border-orange-100/90 text-orange-900 text-xs sm:text-sm leading-relaxed">
+                  <p className="font-medium text-orange-800">
+                    {t('whyTranslateDishes')}
+                  </p>
+                </div>
+
+                {/* Instant Google Translate Buttons */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-zinc-900 flex items-center gap-1.5 text-sm">
+                      <Globe className="w-4 h-4 text-orange-600" />
+                      <span>{t('googleTranslateTitle')}</span>
+                    </h4>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {[
+                      { code: 'zh-TW', label: '🇹🇼 繁體中文 (原版)', isDefault: true },
+                      { code: 'vi', label: '🇻🇳 Tiếng Việt (越南)' },
+                      { code: 'en', label: '🇺🇸 English (英文)' },
+                      { code: 'id', label: '🇮🇩 Indonesia (印尼)' },
+                      { code: 'th', label: '🇹🇭 ภาษาไทย (泰文)' },
+                      { code: 'ja', label: '🇯🇵 日本語 (日文)' },
+                      { code: 'tl', label: '🇵🇭 Filipino (菲律賓)' },
+                      { code: 'ko', label: '🇰🇷 한국어 (韓文)' },
+                    ].map((lang) => (
+                      <button
+                        key={lang.code}
+                        type="button"
+                        onClick={() => handleTranslatePage(lang.code)}
+                        className={clsx(
+                          "flex items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all shadow-2xs text-center cursor-pointer",
+                          lang.isDefault
+                            ? "bg-zinc-100 hover:bg-zinc-200 border-zinc-200 text-zinc-700"
+                            : "bg-white hover:bg-orange-50 border-zinc-200 hover:border-orange-300 text-zinc-800 hover:text-orange-600"
+                        )}
+                      >
+                        {lang.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Browser Built-in Translation Guide */}
+                <div className="space-y-3 pt-4 border-t border-zinc-100">
+                  <h4 className="font-bold text-zinc-900 flex items-center gap-1.5 text-sm">
+                    <Smartphone className="w-4 h-4 text-orange-600" />
+                    <span>{t('browserTranslateTitle')}</span>
+                  </h4>
+                  <div className="space-y-3 text-xs text-zinc-600 bg-zinc-50 p-4 rounded-2xl border border-zinc-100">
+                    <div className="flex items-start gap-2.5">
+                      <span className="font-bold text-orange-600 text-sm leading-none shrink-0 mt-0.5">📱</span>
+                      <p className="leading-relaxed">{t('chromeMobileTip')}</p>
+                    </div>
+                    <div className="flex items-start gap-2.5">
+                      <span className="font-bold text-orange-600 text-sm leading-none shrink-0 mt-0.5">🍎</span>
+                      <p className="leading-relaxed">{t('safariTip')}</p>
+                    </div>
+                    <div className="flex items-start gap-2.5">
+                      <span className="font-bold text-orange-600 text-sm leading-none shrink-0 mt-0.5">💻</span>
+                      <p className="leading-relaxed">{t('chromeDesktopTip')}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <Button onClick={() => setShowTranslateModal(false)} className="w-full py-2.5 font-bold">
+                    {t('confirm')}
+                  </Button>
                 </div>
               </div>
             </motion.div>
