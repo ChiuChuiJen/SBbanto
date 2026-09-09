@@ -24,7 +24,15 @@ import {
   ShieldCheck,
   Copy,
   Check,
-  Search
+  Search,
+  TrendingUp,
+  RotateCcw,
+  SlidersHorizontal,
+  ArrowUpRight,
+  ArrowDownRight,
+  Percent,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import { format, isAfter, parseISO, addDays, addHours } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
@@ -42,6 +50,7 @@ import {
   doc, 
   setDoc, 
   deleteDoc,
+  writeBatch,
   serverTimestamp,
   Timestamp,
   getDocFromServer
@@ -78,6 +87,15 @@ interface Dish {
   name: string;
   price: number;
   category?: string;
+}
+
+interface BatchDishItem {
+  id: string;
+  storeId: string;
+  name: string;
+  category?: string;
+  originalPrice: number;
+  newPrice: number;
 }
 
 interface Plan {
@@ -133,7 +151,8 @@ const Button = ({
   variant = 'primary', 
   className, 
   disabled,
-  type = 'button'
+  type = 'button',
+  size
 }: { 
   children: React.ReactNode; 
   onClick?: () => void; 
@@ -141,6 +160,7 @@ const Button = ({
   className?: string;
   disabled?: boolean;
   type?: 'button' | 'submit';
+  size?: string;
 }) => {
   const variants = {
     primary: 'bg-orange-600 text-white hover:bg-orange-700 shadow-md shadow-orange-500/20',
@@ -490,6 +510,53 @@ function AppContent() {
   const [userName, setUserName] = useState('');
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
+
+  // User Order Edit Modal State
+  const [showUserOrderEditModal, setShowUserOrderEditModal] = useState(false);
+  const [userEditingOrder, setUserEditingOrder] = useState<Order | null>(null);
+  const [userEditUserName, setUserEditUserName] = useState('');
+  const [userEditDishId, setUserEditDishId] = useState('');
+  const [userEditQuantity, setUserEditQuantity] = useState(1);
+  const [userEditSearchDish, setUserEditSearchDish] = useState('');
+  const [userEditSaving, setUserEditSaving] = useState(false);
+
+  // Store Edit Modal State
+  const [showEditStoreModal, setShowEditStoreModal] = useState(false);
+  const [editingStore, setEditingStore] = useState<Store | null>(null);
+  const [editStoreName, setEditStoreName] = useState('');
+  const [editStoreDescription, setEditStoreDescription] = useState('');
+  const [editStoreSaving, setEditStoreSaving] = useState(false);
+
+  // Dish Edit Modal State
+  const [showEditDishModal, setShowEditDishModal] = useState(false);
+  const [editingDish, setEditingDish] = useState<Dish | null>(null);
+  const [editDishStoreId, setEditDishStoreId] = useState('');
+  const [editDishName, setEditDishName] = useState('');
+  const [editDishPrice, setEditDishPrice] = useState('');
+  const [editDishCategory, setEditDishCategory] = useState('');
+  const [editDishSaving, setEditDishSaving] = useState(false);
+
+  // Batch Dish Price Edit Mode State
+  const [isBatchDishEditMode, setIsBatchDishEditMode] = useState(false);
+  const [batchDishItems, setBatchDishItems] = useState<Record<string, BatchDishItem>>({});
+  const [batchSelectedDishIds, setBatchSelectedDishIds] = useState<string[]>([]);
+  const [batchScope, setBatchScope] = useState<'all' | 'category' | 'selected'>('all');
+  const [batchScopeCategory, setBatchScopeCategory] = useState<string>('');
+  const [batchToolTab, setBatchToolTab] = useState<'amount' | 'percent' | 'fixed'>('amount');
+  const [batchCustomDelta, setBatchCustomDelta] = useState<string>('10');
+  const [batchCustomPercent, setBatchCustomPercent] = useState<string>('10');
+  const [batchFixedPrice, setBatchFixedPrice] = useState<string>('');
+  const [batchFilterCategory, setBatchFilterCategory] = useState<string>('全部');
+  const [batchSearchKeyword, setBatchSearchKeyword] = useState<string>('');
+  const [showBatchConfirmModal, setShowBatchConfirmModal] = useState(false);
+  const [batchSaving, setBatchSaving] = useState(false);
+  const [batchSuccessNotice, setBatchSuccessNotice] = useState<string | null>(null);
+
+  const getModifiedBatchDishes = (): BatchDishItem[] => {
+    return (Object.values(batchDishItems) as BatchDishItem[]).filter(
+      item => item && item.newPrice !== item.originalPrice
+    );
+  };
 
   // Admin State
   const [adminTab, setAdminTab] = useState<'plans' | 'stores' | 'dishes' | 'orders' | 'announcement' | 'permissions'>('plans');
@@ -910,53 +977,50 @@ ${reportText}`;
     };
 
     try {
-      if (editingOrderId) {
-        await setDoc(doc(db, 'orders', editingOrderId), { ...orderData, id: editingOrderId });
-      } else {
-        const orderRef = doc(collection(db, 'orders'));
-        const id = orderRef.id;
-        await setDoc(orderRef, { ...orderData, id });
+      const orderRef = doc(collection(db, 'orders'));
+      const id = orderRef.id;
+      await setDoc(orderRef, { ...orderData, id });
+      
+      // Notify new order
+      if (tgSettings.notifyNewOrder || lineSettings.notifyNewOrder) {
+        const store = stores.find(s => s.id === selectedPlan.storeId);
+        // Get all orders for this plan, append the new one for calculating summary
+        const planOrders = orders.filter(o => o.planId === selectedPlan.id);
+        const allOrdersForPlan = [...planOrders, { ...orderData, id } as Order];
         
-        // Notify new order
-        if (tgSettings.notifyNewOrder || lineSettings.notifyNewOrder) {
-          const store = stores.find(s => s.id === selectedPlan.storeId);
-          // Get all orders for this plan, append the new one for calculating summary
-          const planOrders = orders.filter(o => o.planId === selectedPlan.id);
-          const allOrdersForPlan = [...planOrders, { ...orderData, id } as Order];
-          
-          let existingOrdersText = planOrders.map(o => {
-            const d = dishes.find(dd => dd.id === o.dishId);
-            return `${o.userName}: ${d?.name || '未知菜色'} x${o.quantity}`;
-          }).join('\n');
-          
-          if (!existingOrdersText) existingOrdersText = '尚無其他訂單';
+        let existingOrdersText = planOrders.map(o => {
+          const d = dishes.find(dd => dd.id === o.dishId);
+          return `${o.userName}: ${d?.name || '未知菜色'} x${o.quantity}`;
+        }).join('\n');
+        
+        if (!existingOrdersText) existingOrdersText = '尚無其他訂單';
 
-          // Group by dish for summary
-          const dishSummary: { [dishId: string]: { name: string, price: number, totalQuantity: number, users: string[] } } = {};
-          allOrdersForPlan.forEach(o => {
-            const d = dishes.find(dd => dd.id === o.dishId);
-            if (d) {
-              if (!dishSummary[d.id]) {
-                dishSummary[d.id] = { name: d.name, price: d.price, totalQuantity: 0, users: [] };
-              }
-              dishSummary[d.id].totalQuantity += o.quantity;
-              dishSummary[d.id].users.push(`${o.userName}(${o.quantity})`);
+        // Group by dish for summary
+        const dishSummary: { [dishId: string]: { name: string, price: number, totalQuantity: number, users: string[] } } = {};
+        allOrdersForPlan.forEach(o => {
+          const d = dishes.find(dd => dd.id === o.dishId);
+          if (d) {
+            if (!dishSummary[d.id]) {
+              dishSummary[d.id] = { name: d.name, price: d.price, totalQuantity: 0, users: [] };
             }
-          });
+            dishSummary[d.id].totalQuantity += o.quantity;
+            dishSummary[d.id].users.push(`${o.userName}(${o.quantity})`);
+          }
+        });
 
-          // A區 - 報單用
-          const sortedDishes = Object.values(dishSummary).sort((a, b) => b.price - a.price);
-          let summaryA = sortedDishes.map(d => `$${d.price} ${d.name} x ${d.totalQuantity}`).join('\n');
-          let totalQ = sortedDishes.reduce((sum, d) => sum + d.totalQuantity, 0);
-          let totalAmount = sortedDishes.reduce((sum, d) => sum + d.price * d.totalQuantity, 0);
-          summaryA += `\n總數量：${totalQ} 份\n總金額：$${totalAmount}`;
+        // A區 - 報單用
+        const sortedDishes = Object.values(dishSummary).sort((a, b) => b.price - a.price);
+        let summaryA = sortedDishes.map(d => `$${d.price} ${d.name} x ${d.totalQuantity}`).join('\n');
+        let totalQ = sortedDishes.reduce((sum, d) => sum + d.totalQuantity, 0);
+        let totalAmount = sortedDishes.reduce((sum, d) => sum + d.price * d.totalQuantity, 0);
+        summaryA += `\n總數量：${totalQ} 份\n總金額：$${totalAmount}`;
 
-          // B區 - 取餐比對用
-          let summaryB = sortedDishes.map(d => `* ${d.name} (${d.totalQuantity}): ${d.users.join(', ')}`).join('\n');
+        // B區 - 取餐比對用
+        let summaryB = sortedDishes.map(d => `* ${d.name} (${d.totalQuantity}): ${d.users.join(', ')}`).join('\n');
 
-          const newOrderDish = dishes.find(d => d.id === selectedDish.id)?.name || '未知菜色';
+        const newOrderDish = dishes.find(d => d.id === selectedDish.id)?.name || '未知菜色';
 
-          const text = `🔔 <b>下單通知</b>
+        const text = `🔔 <b>下單通知</b>
 
 <b>方案名:</b> ${selectedPlan.name}
 <b>店家:</b> ${store?.name || '未知'}
@@ -979,12 +1043,11 @@ ${summaryA}
 <b>【B區 - 取餐比對用】</b>
 ${summaryB}`;
 
-          if (tgSettings.notifyNewOrder) {
-            sendTelegramMessage(text);
-          }
-          if (lineSettings.notifyNewOrder) {
-            sendLineMessage(text);
-          }
+        if (tgSettings.notifyNewOrder) {
+          sendTelegramMessage(text);
+        }
+        if (lineSettings.notifyNewOrder) {
+          sendLineMessage(text);
         }
       }
       
@@ -1002,15 +1065,30 @@ ${summaryB}`;
   };
 
   const startEditOrder = (order: Order) => {
-    const plan = plans.find(p => p.id === order.planId);
-    const dish = dishes.find(d => d.id === order.dishId);
-    if (plan && dish) {
-      setSelectedPlan(plan);
-      setSelectedDish(dish);
-      setUserName(order.userName);
-      setQuantity(order.quantity || 1);
-      setEditingOrderId(order.id);
-      setView('user');
+    setUserEditingOrder(order);
+    setUserEditUserName(order.userName);
+    setUserEditDishId(order.dishId);
+    setUserEditQuantity(order.quantity || 1);
+    setUserEditSearchDish('');
+    setShowUserOrderEditModal(true);
+  };
+
+  const saveUserOrderEdit = async () => {
+    if (!userEditingOrder || !userEditUserName.trim() || !userEditDishId || userEditQuantity < 1) return;
+    setUserEditSaving(true);
+    try {
+      await setDoc(doc(db, 'orders', userEditingOrder.id), {
+        ...userEditingOrder,
+        userName: userEditUserName.trim(),
+        dishId: userEditDishId,
+        quantity: userEditQuantity
+      }, { merge: true });
+      setShowUserOrderEditModal(false);
+      setUserEditingOrder(null);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, 'orders');
+    } finally {
+      setUserEditSaving(false);
     }
   };
 
@@ -1304,14 +1382,9 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
 
     const performSave = async () => {
       try {
-        if (editingStoreId) {
-          await setDoc(doc(db, 'stores', editingStoreId), { ...newStore, id: editingStoreId }, { merge: true });
-          setEditingStoreId(null);
-        } else {
-          const storeRef = doc(collection(db, 'stores'));
-          const id = storeRef.id;
-          await setDoc(storeRef, { id, ...newStore });
-        }
+        const storeRef = doc(collection(db, 'stores'));
+        const id = storeRef.id;
+        await setDoc(storeRef, { id, ...newStore });
         setNewStore({ name: '', description: '' });
         setConfirmAction(null);
       } catch (e) {
@@ -1320,15 +1393,35 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
     };
 
     setConfirmAction({
-      title: editingStoreId ? "確認修改店家？" : "確認新增店家？",
-      message: `確定要${editingStoreId ? "修改" : "新增"}「${newStore.name}」嗎？`,
+      title: "確認新增店家？",
+      message: `確定要新增「${newStore.name}」嗎？`,
       onConfirm: performSave
     });
   };
 
   const startEditStore = (store: Store) => {
-    setNewStore({ name: store.name, description: store.description });
-    setEditingStoreId(store.id);
+    setEditingStore(store);
+    setEditStoreName(store.name);
+    setEditStoreDescription(store.description || '');
+    setShowEditStoreModal(true);
+  };
+
+  const saveEditStore = async () => {
+    if (!editingStore || !editStoreName.trim()) return;
+    setEditStoreSaving(true);
+    try {
+      await setDoc(doc(db, 'stores', editingStore.id), {
+        ...editingStore,
+        name: editStoreName.trim(),
+        description: editStoreDescription.trim()
+      }, { merge: true });
+      setShowEditStoreModal(false);
+      setEditingStore(null);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, 'stores');
+    } finally {
+      setEditStoreSaving(false);
+    }
   };
 
   const exportStores = () => {
@@ -1378,22 +1471,13 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
     
     const performSave = async () => {
       try {
-        if (editingDishId) {
-          await setDoc(doc(db, 'dishes', editingDishId), { 
-            ...newDish, 
-            id: editingDishId,
-            price 
-          });
-          setEditingDishId(null);
-        } else {
-          const dishRef = doc(collection(db, 'dishes'));
-          const id = dishRef.id;
-          await setDoc(dishRef, { 
-            id, 
-            ...newDish, 
-            price
-          });
-        }
+        const dishRef = doc(collection(db, 'dishes'));
+        const id = dishRef.id;
+        await setDoc(dishRef, { 
+          id, 
+          ...newDish, 
+          price
+        });
         setNewDish({ ...newDish, name: '', price: '' }); // Keep storeId and category
         setConfirmAction(null);
       } catch (e) {
@@ -1402,8 +1486,8 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
     };
 
     setConfirmAction({
-      title: editingDishId ? "確認修改菜色？" : "確認新增菜色？",
-      message: `確定要${editingDishId ? "修改" : "新增"}「${newDish.name}」嗎？`,
+      title: "確認新增菜色？",
+      message: `確定要新增「${newDish.name}」嗎？`,
       onConfirm: performSave
     });
   };
@@ -1452,14 +1536,35 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
   };
 
   const startEditDish = (dish: Dish) => {
-    setNewDish({
-      storeId: dish.storeId,
-      name: dish.name,
-      price: dish.price.toString(),
-      category: dish.category || ''
-    });
-    setEditingDishId(dish.id);
-    // Scroll to top of dish form if needed, or just let user find it
+    setEditingDish(dish);
+    setEditDishStoreId(dish.storeId);
+    setEditDishName(dish.name);
+    setEditDishPrice(dish.price.toString());
+    setEditDishCategory(dish.category || '');
+    setShowEditDishModal(true);
+  };
+
+  const saveEditDish = async () => {
+    if (!editingDish) return;
+    const price = parseFloat(editDishPrice);
+    if (!editDishName.trim() || !editDishStoreId || isNaN(price) || price < 0) return;
+
+    setEditDishSaving(true);
+    try {
+      await setDoc(doc(db, 'dishes', editingDish.id), {
+        ...editingDish,
+        storeId: editDishStoreId,
+        name: editDishName.trim(),
+        price,
+        category: editDishCategory.trim()
+      }, { merge: true });
+      setShowEditDishModal(false);
+      setEditingDish(null);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, 'dishes');
+    } finally {
+      setEditDishSaving(false);
+    }
   };
 
   const addBulkDishes = async () => {
@@ -1505,6 +1610,190 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
       alert(`Finished with some errors:\n${errors.join('\n')}`);
     } else {
       setBulkDishInput('');
+    }
+  };
+
+  const enterBatchEditMode = (storeId: string) => {
+    const storeDishes = dishes.filter(d => d.storeId === storeId);
+    const initialItems: { 
+      [id: string]: { 
+        id: string; 
+        storeId: string; 
+        name: string; 
+        category?: string; 
+        originalPrice: number; 
+        newPrice: number; 
+      } 
+    } = {};
+    storeDishes.forEach(d => {
+      initialItems[d.id] = {
+        id: d.id,
+        storeId: d.storeId,
+        name: d.name,
+        category: d.category || '',
+        originalPrice: d.price,
+        newPrice: d.price
+      };
+    });
+    setBatchDishItems(initialItems);
+    setBatchSelectedDishIds(storeDishes.map(d => d.id));
+    setBatchFilterCategory('全部');
+    setBatchSearchKeyword('');
+    setBatchScope('all');
+    setBatchScopeCategory('');
+    setBatchSuccessNotice(null);
+    setIsBatchDishEditMode(true);
+  };
+
+  const exitBatchEditMode = () => {
+    const modifiedCount = getModifiedBatchDishes().length;
+    if (modifiedCount > 0) {
+      if (!window.confirm(`目前有 ${modifiedCount} 筆菜色價格已被修改但尚未儲存，確定要放棄修改並退出嗎？`)) {
+        return;
+      }
+    }
+    setIsBatchDishEditMode(false);
+    setBatchDishItems({});
+    setBatchSelectedDishIds([]);
+  };
+
+  const applyBatchDelta = (amount: number) => {
+    setBatchDishItems(prev => {
+      const next = { ...prev };
+      Object.keys(next).forEach(id => {
+        const item = next[id];
+        let inScope = false;
+        if (batchScope === 'all') {
+          inScope = true;
+        } else if (batchScope === 'selected') {
+          inScope = batchSelectedDishIds.includes(id);
+        } else if (batchScope === 'category') {
+          inScope = (item.category || '未分類') === batchScopeCategory;
+        }
+
+        if (inScope) {
+          const updatedPrice = Math.max(0, item.newPrice + amount);
+          next[id] = { ...item, newPrice: updatedPrice };
+        }
+      });
+      return next;
+    });
+  };
+
+  const applyBatchPercent = (percent: number) => {
+    setBatchDishItems(prev => {
+      const next = { ...prev };
+      Object.keys(next).forEach(id => {
+        const item = next[id];
+        let inScope = false;
+        if (batchScope === 'all') {
+          inScope = true;
+        } else if (batchScope === 'selected') {
+          inScope = batchSelectedDishIds.includes(id);
+        } else if (batchScope === 'category') {
+          inScope = (item.category || '未分類') === batchScopeCategory;
+        }
+
+        if (inScope) {
+          const updatedPrice = Math.max(0, Math.round(item.newPrice * (1 + percent / 100)));
+          next[id] = { ...item, newPrice: updatedPrice };
+        }
+      });
+      return next;
+    });
+  };
+
+  const applyBatchFixedPrice = (fixedPrice: number) => {
+    if (isNaN(fixedPrice) || fixedPrice < 0) return;
+    setBatchDishItems(prev => {
+      const next = { ...prev };
+      Object.keys(next).forEach(id => {
+        const item = next[id];
+        let inScope = false;
+        if (batchScope === 'all') {
+          inScope = true;
+        } else if (batchScope === 'selected') {
+          inScope = batchSelectedDishIds.includes(id);
+        } else if (batchScope === 'category') {
+          inScope = (item.category || '未分類') === batchScopeCategory;
+        }
+
+        if (inScope) {
+          next[id] = { ...item, newPrice: fixedPrice };
+        }
+      });
+      return next;
+    });
+  };
+
+  const resetAllBatchPrices = () => {
+    setBatchDishItems(prev => {
+      const next = { ...prev };
+      Object.keys(next).forEach(id => {
+        next[id] = { ...next[id], newPrice: next[id].originalPrice };
+      });
+      return next;
+    });
+  };
+
+  const updateSingleBatchPrice = (dishId: string, newPrice: number) => {
+    setBatchDishItems(prev => {
+      if (!prev[dishId]) return prev;
+      return {
+        ...prev,
+        [dishId]: {
+          ...prev[dishId],
+          newPrice: Math.max(0, newPrice)
+        }
+      };
+    });
+  };
+
+  const toggleSelectAllInFilter = (filteredIds: string[]) => {
+    const allSelected = filteredIds.length > 0 && filteredIds.every(id => batchSelectedDishIds.includes(id));
+    if (allSelected) {
+      setBatchSelectedDishIds(prev => prev.filter(id => !filteredIds.includes(id)));
+    } else {
+      setBatchSelectedDishIds(prev => Array.from(new Set([...prev, ...filteredIds])));
+    }
+  };
+
+  const toggleSelectDish = (dishId: string) => {
+    setBatchSelectedDishIds(prev => 
+      prev.includes(dishId) ? prev.filter(id => id !== dishId) : [...prev, dishId]
+    );
+  };
+
+  const saveBatchDishPrices = async () => {
+    const modifiedItems = getModifiedBatchDishes();
+    if (modifiedItems.length === 0) return;
+
+    setBatchSaving(true);
+    try {
+      const batch = writeBatch(db);
+      modifiedItems.forEach(item => {
+        const ref = doc(db, 'dishes', item.id);
+        batch.set(ref, {
+          id: item.id,
+          storeId: item.storeId,
+          name: item.name,
+          price: Number(item.newPrice),
+          category: item.category || ''
+        }, { merge: true });
+      });
+      await batch.commit();
+
+      const storeName = stores.find(s => s.id === modifiedItems[0].storeId)?.name || '店家';
+      setShowBatchConfirmModal(false);
+      setIsBatchDishEditMode(false);
+      setBatchDishItems({});
+      setBatchSelectedDishIds([]);
+      setBatchSuccessNotice(`🎉 已成功批次更新「${storeName}」共 ${modifiedItems.length} 筆菜色價格！`);
+      setTimeout(() => setBatchSuccessNotice(null), 5000);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, 'dishes');
+    } finally {
+      setBatchSaving(false);
     }
   };
 
@@ -1919,9 +2208,9 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                             >
                               {orderSuccess ? (
                                 <span className="flex items-center justify-center gap-2">
-                                  <CheckCircle2 className="w-5 h-5" /> {editingOrderId ? '修改成功！' : '訂購成功！'}
+                                  <CheckCircle2 className="w-5 h-5" /> 訂購成功！
                                 </span>
-                              ) : (editingOrderId ? '確認修改' : '確認訂購')}
+                              ) : '確認訂購'}
                             </Button>
                           </div>
                         </motion.div>
@@ -1965,18 +2254,18 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                                 <div className="font-bold text-orange-600">${(dish?.price || 0) * (order.quantity || 0)}</div>
                                 <div className="text-[10px] text-zinc-400">{format(parseISO(order.timestamp), 'HH:mm')}</div>
                               </div>
-                              {isMyOrder && (
+                              {(isMyOrder || isAdmin) && (
                                 <div className="flex items-center gap-1">
                                   <button 
                                     onClick={() => startEditOrder(order)}
-                                    className="p-2 text-zinc-400 hover:text-orange-600 transition-colors"
-                                    title="修改"
+                                    className="p-2 text-zinc-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                                    title="修改訂單"
                                   >
                                     <Edit2 className="w-4 h-4" />
                                   </button>
                                   <button 
                                     onClick={() => setConfirmDelete({ col: 'orders', id: order.id })}
-                                    className="p-2 text-zinc-400 hover:text-red-500 transition-colors"
+                                    className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                                     title="刪除"
                                   >
                                     <Trash2 className="w-4 h-4" />
@@ -2235,21 +2524,13 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                       </label>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end bg-zinc-50 p-4 rounded-xl">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end bg-zinc-50 p-4 rounded-xl border border-zinc-200/60">
                     <Input label="店家名稱" value={newStore.name} onChange={v => setNewStore({...newStore, name: v})} placeholder="例如：老王便當" />
                     <Input label="店家描述" value={newStore.description} onChange={v => setNewStore({...newStore, description: v})} placeholder="例如：排骨飯很好吃" />
                     <div className="flex gap-2">
                       <Button onClick={addStore} className="flex-1">
-                        {editingStoreId ? <><Edit2 className="w-4 h-4 inline mr-2" /> 更新店家</> : <><Plus className="w-4 h-4 inline mr-2" /> 新增店家</>}
+                        <Plus className="w-4 h-4 inline mr-2" /> 新增店家
                       </Button>
-                      {editingStoreId && (
-                        <Button variant="outline" onClick={() => {
-                          setEditingStoreId(null);
-                          setNewStore({ name: '', description: '' });
-                        }}>
-                          取消
-                        </Button>
-                      )}
                     </div>
                   </div>
 
@@ -2294,53 +2575,47 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                       </label>
                     </div>
                   </div>
-                  <div className="bg-zinc-50 p-6 rounded-xl space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-sm font-medium text-zinc-600">所屬店家</label>
-                        <select 
-                          value={newDish.storeId} 
-                          onChange={e => setNewDish({...newDish, storeId: e.target.value})}
-                          className="px-4 py-2 rounded-lg border border-zinc-200 bg-white"
-                        >
-                          <option value="">選擇店家</option>
-                          {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                        </select>
+                  {!isBatchDishEditMode && (
+                    <div className="bg-zinc-50 p-6 rounded-xl space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-sm font-medium text-zinc-600">所屬店家</label>
+                          <select 
+                            value={newDish.storeId} 
+                            onChange={e => setNewDish({...newDish, storeId: e.target.value})}
+                            className="px-4 py-2 rounded-lg border border-zinc-200 bg-white"
+                          >
+                            <option value="">選擇店家</option>
+                            {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                          </select>
+                        </div>
+                        <Input label="菜色名稱" value={newDish.name} onChange={v => setNewDish({...newDish, name: v})} placeholder="例如：招牌排骨飯" />
+                        <Input label="價格" type="number" value={newDish.price} onChange={v => setNewDish({...newDish, price: v})} placeholder="100" />
+                        <Input label="分類 (選填)" value={newDish.category || ''} onChange={v => setNewDish({...newDish, category: v})} placeholder="例如：主食、小菜" />
                       </div>
-                      <Input label="菜色名稱" value={newDish.name} onChange={v => setNewDish({...newDish, name: v})} placeholder="例如：招牌排骨飯" />
-                      <Input label="價格" type="number" value={newDish.price} onChange={v => setNewDish({...newDish, price: v})} placeholder="100" />
-                      <Input label="分類 (選填)" value={newDish.category || ''} onChange={v => setNewDish({...newDish, category: v})} placeholder="例如：主食、小菜" />
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      {editingDishId && (
-                        <Button variant="outline" onClick={() => {
-                          setEditingDishId(null);
-                          setNewDish({ name: '', price: '', storeId: newDish.storeId, category: newDish.category });
-                        }}>
-                          {t('cancel')}
+                      <div className="flex justify-end gap-2">
+                        <Button onClick={addDish}>
+                          <Plus className="w-4 h-4 inline mr-2" /> {t('addDish')}
                         </Button>
-                      )}
-                      <Button onClick={addDish}>
-                        {editingDishId ? <><Edit2 className="w-4 h-4 inline mr-2" /> {t('updateDish')}</> : <><Plus className="w-4 h-4 inline mr-2" /> {t('addDish')}</>}
-                      </Button>
-                    </div>
+                      </div>
 
-                    <div className="pt-6 border-t border-zinc-200 space-y-4">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-sm font-medium text-zinc-600">批次新增菜色 (格式: 名稱, 價格, 分類)</label>
-                        <textarea 
-                          value={bulkDishInput}
-                          onChange={e => setBulkDishInput(e.target.value)}
-                          placeholder="排骨飯, 100, 主食&#10;雞腿飯, 110, 主食&#10;燙青菜, 40, 小菜"
-                          className="w-full px-4 py-3 rounded-lg border border-zinc-200 bg-white min-h-[120px] font-mono text-sm"
-                        />
-                        <p className="text-[10px] text-zinc-400">每行一筆，逗號分隔。分類可省略（將使用上方填寫的分類）。</p>
-                      </div>
-                      <div className="flex justify-end">
-                        <Button onClick={addBulkDishes} variant="outline"><Plus className="w-4 h-4 inline mr-2" /> 批次新增</Button>
+                      <div className="pt-6 border-t border-zinc-200 space-y-4">
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-sm font-medium text-zinc-600">批次新增菜色 (格式: 名稱, 價格, 分類)</label>
+                          <textarea 
+                            value={bulkDishInput}
+                            onChange={e => setBulkDishInput(e.target.value)}
+                            placeholder="排骨飯, 100, 主食&#10;雞腿飯, 110, 主食&#10;燙青菜, 40, 小菜"
+                            className="w-full px-4 py-3 rounded-lg border border-zinc-200 bg-white min-h-[120px] font-mono text-sm"
+                          />
+                          <p className="text-[10px] text-zinc-400">每行一筆，逗號分隔。分類可省略（將使用上方填寫的分類）。</p>
+                        </div>
+                        <div className="flex justify-end">
+                          <Button onClick={addBulkDishes} variant="outline"><Plus className="w-4 h-4 inline mr-2" /> 批次新增</Button>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   <div className="space-y-10">
                     {stores.length > 0 && (
@@ -2351,7 +2626,20 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                           return (
                             <button
                               key={store.id}
-                              onClick={() => setAdminSelectedDishStoreId(store.id)}
+                              onClick={() => {
+                                if (isBatchDishEditMode) {
+                                  const modifiedCount = getModifiedBatchDishes().length;
+                                  if (modifiedCount > 0) {
+                                    if (!window.confirm(`目前有 ${modifiedCount} 筆菜色價格已被修改但尚未儲存，確定要切換店家並放棄修改嗎？`)) {
+                                      return;
+                                    }
+                                  }
+                                  setIsBatchDishEditMode(false);
+                                  setBatchDishItems({});
+                                  setBatchSelectedDishIds([]);
+                                }
+                                setAdminSelectedDishStoreId(store.id);
+                              }}
                               className={cn(
                                 "px-4 py-2 rounded-t-xl text-sm font-bold whitespace-nowrap transition-all border-b-2 flex items-center gap-2",
                                 isActive
@@ -2384,63 +2672,641 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                         
                         // Group by category
                         const categories = Array.from(new Set(storeDishes.map(d => d.category || '未分類')));
+                        const modifiedBatchDishes = getModifiedBatchDishes();
+
+                        // Filtered dishes for batch mode
+                        const filteredStoreDishes = storeDishes.filter(d => {
+                          const matchesCat = batchFilterCategory === '全部' || (d.category || '未分類') === batchFilterCategory;
+                          const matchesSearch = !batchSearchKeyword.trim() || d.name.toLowerCase().includes(batchSearchKeyword.trim().toLowerCase());
+                          return matchesCat && matchesSearch;
+                        });
 
                         return (
                           <div key={store.id} className="space-y-6">
-                            <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-zinc-100 gap-3">
                               <div className="flex items-center gap-3">
                                 <Store className="w-5 h-5 text-orange-600" />
                                 <h3 className="text-lg font-bold">{store.name}</h3>
+                                <span className="text-xs font-bold text-zinc-400">({storeDishes.length} 筆菜色)</span>
                               </div>
-                              <span className="text-xs font-bold text-zinc-400">{storeDishes.length} 筆菜色</span>
+                              <div className="flex items-center gap-2">
+                                {storeDishes.length > 0 && !isBatchDishEditMode && (
+                                  <Button 
+                                    onClick={() => enterBatchEditMode(store.id)}
+                                    className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-2 px-3.5 rounded-xl shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+                                  >
+                                    <TrendingUp className="w-4 h-4" />
+                                    批量修改模式 (快速調價)
+                                  </Button>
+                                )}
+                              </div>
                             </div>
-                            
-                            {storeDishes.length > 0 ? (
-                              <div className="grid grid-cols-1 gap-8">
-                                {categories.map(cat => (
-                                  <div key={cat} className="space-y-4">
-                                    <h4 className="text-xs font-black text-zinc-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
-                                      {cat}
-                                    </h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                      {storeDishes.filter(d => (d.category || '未分類') === cat).map(dish => (
-                                    <div key={dish.id} className="p-4 rounded-2xl border border-zinc-100 flex justify-between items-center bg-white hover:border-orange-200 hover:shadow-md hover:shadow-orange-500/5 transition-all">
-                                          <div>
-                                            <div className="font-bold text-zinc-800">{dish.name}</div>
-                                            <div className="text-orange-600 font-black mt-1">
-                                              <span className="text-[10px] mr-0.5">$</span>
-                                              {dish.price}
-                                            </div>
-                                          </div>
-                                          <div className="flex items-center gap-1 transition-opacity">
-                                            <button 
-                                              onClick={() => startEditDish(dish)}
-                                              className="p-2 text-zinc-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-all"
-                                              title={t('edit')}
-                                            >
-                                              <Edit2 className="w-4 h-4" />
-                                            </button>
-                                            <button 
-                                              onClick={() => setConfirmDelete({ col: 'dishes', id: dish.id })} 
-                                              className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                                              title={t('delete')}
-                                            >
-                                              <Trash2 className="w-4 h-4" />
-                                            </button>
-                                          </div>
-                                        </div>
-                                      ))}
+
+                            {batchSuccessNotice && (
+                              <div className="p-4 bg-green-50 border border-green-200 text-green-800 rounded-2xl flex items-center justify-between text-sm font-medium animate-fade-in">
+                                <div className="flex items-center gap-2">
+                                  <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                                  <span>{batchSuccessNotice}</span>
+                                </div>
+                                <button onClick={() => setBatchSuccessNotice(null)} className="text-green-600 hover:text-green-800 p-1 cursor-pointer">
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
+
+                            {isBatchDishEditMode ? (
+                              <div className="space-y-6">
+                                {/* Batch Mode Workspace Header */}
+                                <div className="bg-gradient-to-r from-orange-500/10 via-amber-500/5 to-transparent p-5 rounded-2xl border border-orange-200/80 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-orange-600 text-white uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                                        <TrendingUp className="w-3 h-3" /> 批量調價工作區
+                                      </span>
+                                      <span className="text-xs font-bold text-zinc-400">{store.name}</span>
+                                    </div>
+                                    <h4 className="text-lg font-bold text-zinc-900 mt-1">菜色價格快速批次修改</h4>
+                                    <p className="text-xs text-zinc-500 mt-0.5">
+                                      可針對全店、指定分類或已勾選菜色快速漲價/調價，亦可直接於清單輸入新價格
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      onClick={exitBatchEditMode}
+                                      className="text-xs py-2 px-3.5 border-zinc-300 text-zinc-700 hover:bg-zinc-100 cursor-pointer"
+                                    >
+                                      退出批量模式
+                                    </Button>
+                                  </div>
+                                </div>
+
+                                {/* Quick Price Adjustment Toolbox */}
+                                <div className="bg-white p-5 rounded-2xl border border-zinc-200 shadow-sm space-y-5">
+                                  <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
+                                    <div className="flex items-center gap-2">
+                                      <SlidersHorizontal className="w-4 h-4 text-orange-600" />
+                                      <span className="text-sm font-bold text-zinc-800">批次調價工具箱 (漲價 / 降價)</span>
+                                    </div>
+                                    <span className="text-xs font-bold text-orange-600 bg-orange-50 px-2.5 py-1 rounded-full border border-orange-100">
+                                      已變動 {modifiedBatchDishes.length} 筆價格
+                                    </span>
+                                  </div>
+
+                                  {/* Step 1: Scope */}
+                                  <div className="space-y-2">
+                                    <label className="text-xs font-bold text-zinc-700 flex items-center gap-1.5">
+                                      <span className="w-4 h-4 rounded-full bg-orange-500 text-white text-[10px] font-bold flex items-center justify-center">1</span>
+                                      選擇套用範圍：
+                                    </label>
+                                    <div className="flex flex-wrap gap-2 items-center">
+                                      <button
+                                        type="button"
+                                        onClick={() => setBatchScope('all')}
+                                        className={cn(
+                                          "px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer",
+                                          batchScope === 'all'
+                                            ? "bg-orange-50 text-orange-700 border-orange-300 ring-2 ring-orange-200"
+                                            : "bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100"
+                                        )}
+                                      >
+                                        全店所有菜色 ({storeDishes.length} 筆)
+                                      </button>
+                                      
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setBatchScope('category');
+                                          if (!batchScopeCategory && categories.length > 0) {
+                                            setBatchScopeCategory(categories[0]);
+                                          }
+                                        }}
+                                        className={cn(
+                                          "px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer",
+                                          batchScope === 'category'
+                                            ? "bg-orange-50 text-orange-700 border-orange-300 ring-2 ring-orange-200"
+                                            : "bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100"
+                                        )}
+                                      >
+                                        依指定分類
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => setBatchScope('selected')}
+                                        className={cn(
+                                          "px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer",
+                                          batchScope === 'selected'
+                                            ? "bg-orange-50 text-orange-700 border-orange-300 ring-2 ring-orange-200"
+                                            : "bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100"
+                                        )}
+                                      >
+                                        已勾選品項 ({batchSelectedDishIds.length} 筆)
+                                      </button>
+
+                                      {batchScope === 'category' && (
+                                        <select
+                                          value={batchScopeCategory}
+                                          onChange={e => setBatchScopeCategory(e.target.value)}
+                                          className="px-3 py-1.5 rounded-xl border border-orange-300 text-xs font-bold bg-white text-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                                        >
+                                          {categories.map(c => (
+                                            <option key={c} value={c}>{c} ({storeDishes.filter(d => (d.category || '未分類') === c).length} 筆)</option>
+                                          ))}
+                                        </select>
+                                      )}
                                     </div>
                                   </div>
-                                ))}
+
+                                  {/* Step 2: Action */}
+                                  <div className="space-y-3 pt-2 border-t border-zinc-100">
+                                    <label className="text-xs font-bold text-zinc-700 flex items-center gap-1.5">
+                                      <span className="w-4 h-4 rounded-full bg-orange-500 text-white text-[10px] font-bold flex items-center justify-center">2</span>
+                                      選擇調價方式：
+                                    </label>
+
+                                    {/* Tabs */}
+                                    <div className="flex gap-1 p-1 bg-zinc-100 rounded-xl max-w-md">
+                                      <button
+                                        type="button"
+                                        onClick={() => setBatchToolTab('amount')}
+                                        className={cn(
+                                          "flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                                          batchToolTab === 'amount' ? "bg-white text-zinc-900 shadow-xs" : "text-zinc-500 hover:text-zinc-800"
+                                        )}
+                                      >
+                                        固定增減金額
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setBatchToolTab('percent')}
+                                        className={cn(
+                                          "flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                                          batchToolTab === 'percent' ? "bg-white text-zinc-900 shadow-xs" : "text-zinc-500 hover:text-zinc-800"
+                                        )}
+                                      >
+                                        依百分比調價
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setBatchToolTab('fixed')}
+                                        className={cn(
+                                          "flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                                          batchToolTab === 'fixed' ? "bg-white text-zinc-900 shadow-xs" : "text-zinc-500 hover:text-zinc-800"
+                                        )}
+                                      >
+                                        統一設定價格
+                                      </button>
+                                    </div>
+
+                                    {/* Tool Tab 1: Amount */}
+                                    {batchToolTab === 'amount' && (
+                                      <div className="space-y-3 pt-1">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <span className="text-xs text-zinc-500 font-medium">常見漲價快速鍵：</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => applyBatchDelta(5)}
+                                            className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                                          >
+                                            +5 元
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => applyBatchDelta(10)}
+                                            className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                                          >
+                                            +10 元
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => applyBatchDelta(15)}
+                                            className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                                          >
+                                            +15 元
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => applyBatchDelta(20)}
+                                            className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                                          >
+                                            +20 元
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => applyBatchDelta(-5)}
+                                            className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-800 rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                                          >
+                                            -5 元 (調降)
+                                          </button>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                                          <span className="text-xs text-zinc-500 font-medium">自訂增減：</span>
+                                          <div className="flex items-center gap-1.5">
+                                            <input
+                                              type="number"
+                                              value={batchCustomDelta}
+                                              onChange={e => setBatchCustomDelta(e.target.value)}
+                                              className="w-20 px-3 py-1.5 text-xs border border-zinc-300 rounded-xl text-center font-mono font-bold focus:outline-none focus:border-orange-500"
+                                              placeholder="10"
+                                            />
+                                            <span className="text-xs text-zinc-600 font-medium">元</span>
+                                          </div>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const amt = parseFloat(batchCustomDelta);
+                                              if (!isNaN(amt) && amt > 0) applyBatchDelta(amt);
+                                            }}
+                                            className="px-3.5 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                                          >
+                                            套用調漲 (+)
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const amt = parseFloat(batchCustomDelta);
+                                              if (!isNaN(amt) && amt > 0) applyBatchDelta(-amt);
+                                            }}
+                                            className="px-3.5 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl text-xs font-bold transition-colors border border-zinc-200 cursor-pointer"
+                                          >
+                                            套用調降 (-)
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Tool Tab 2: Percent */}
+                                    {batchToolTab === 'percent' && (
+                                      <div className="flex flex-wrap items-center gap-3 pt-1">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-xs font-medium text-zinc-600">調整比例：</span>
+                                          <input
+                                            type="number"
+                                            value={batchCustomPercent}
+                                            onChange={e => setBatchCustomPercent(e.target.value)}
+                                            className="w-20 px-3 py-1.5 text-xs border border-zinc-300 rounded-xl text-center font-mono font-bold focus:outline-none focus:border-orange-500"
+                                            placeholder="10"
+                                          />
+                                          <span className="text-xs text-zinc-600 font-medium">%</span>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const p = parseFloat(batchCustomPercent);
+                                            if (!isNaN(p)) applyBatchPercent(p);
+                                          }}
+                                          className="px-3.5 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                                        >
+                                          套用比例調漲
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const p = parseFloat(batchCustomPercent);
+                                            if (!isNaN(p)) applyBatchPercent(-p);
+                                          }}
+                                          className="px-3.5 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl text-xs font-bold transition-colors border border-zinc-200 cursor-pointer"
+                                        >
+                                          套用比例調降
+                                        </button>
+                                        <span className="text-[11px] text-zinc-400">（金額將自動四捨五入至整數）</span>
+                                      </div>
+                                    )}
+
+                                    {/* Tool Tab 3: Fixed Price */}
+                                    {batchToolTab === 'fixed' && (
+                                      <div className="flex flex-wrap items-center gap-3 pt-1">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-xs font-medium text-zinc-600">統一設定為：</span>
+                                          <input
+                                            type="number"
+                                            value={batchFixedPrice}
+                                            onChange={e => setBatchFixedPrice(e.target.value)}
+                                            className="w-24 px-3 py-1.5 text-xs border border-zinc-300 rounded-xl text-center font-mono font-bold focus:outline-none focus:border-orange-500"
+                                            placeholder="100"
+                                          />
+                                          <span className="text-xs text-zinc-600 font-medium">元</span>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const p = parseFloat(batchFixedPrice);
+                                            if (!isNaN(p) && p >= 0) applyBatchFixedPrice(p);
+                                          }}
+                                          className="px-3.5 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                                        >
+                                          套用統一定價
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Tool Footer */}
+                                  <div className="flex justify-between items-center pt-3 border-t border-zinc-100 text-xs">
+                                    <button
+                                      type="button"
+                                      onClick={resetAllBatchPrices}
+                                      className="text-zinc-500 hover:text-red-600 transition-colors flex items-center gap-1 font-medium cursor-pointer"
+                                    >
+                                      <RotateCcw className="w-3.5 h-3.5" />
+                                      全部重設回原價
+                                    </button>
+                                    <div className="text-zinc-400 text-[11px]">
+                                      提示：亦可於下方清單中直接輸入個別菜色之新價格
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Filter & Search Toolbar */}
+                                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                                  <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+                                    {['全部', ...categories].map(cat => {
+                                      const count = cat === '全部' 
+                                        ? storeDishes.length 
+                                        : storeDishes.filter(d => (d.category || '未分類') === cat).length;
+                                      return (
+                                        <button
+                                          key={cat}
+                                          type="button"
+                                          onClick={() => setBatchFilterCategory(cat)}
+                                          className={cn(
+                                            "px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border cursor-pointer",
+                                            batchFilterCategory === cat
+                                              ? "bg-zinc-900 text-white border-zinc-900 shadow-xs"
+                                              : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
+                                          )}
+                                        >
+                                          {cat} <span className="opacity-70 text-[10px]">({count})</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+
+                                  <div className="flex items-center gap-2">
+                                    <div className="relative w-full sm:w-48">
+                                      <input
+                                        type="text"
+                                        value={batchSearchKeyword}
+                                        onChange={e => setBatchSearchKeyword(e.target.value)}
+                                        placeholder="搜尋菜色名稱..."
+                                        className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-zinc-200 bg-white focus:outline-none focus:border-orange-500"
+                                      />
+                                      <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-2.5" />
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleSelectAllInFilter(filteredStoreDishes.map(d => d.id))}
+                                      className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl text-xs font-medium whitespace-nowrap transition-colors cursor-pointer"
+                                    >
+                                      {filteredStoreDishes.length > 0 && filteredStoreDishes.every(d => batchSelectedDishIds.includes(d.id)) ? '取消全選' : '全選品項'}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Table of Dishes */}
+                                <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-left text-sm">
+                                      <thead className="bg-zinc-50 border-b border-zinc-100 text-zinc-500 font-bold text-xs uppercase tracking-wider">
+                                        <tr>
+                                          <th className="py-3 px-4 w-12 text-center">選取</th>
+                                          <th className="py-3 px-4">菜色名稱</th>
+                                          <th className="py-3 px-4">分類</th>
+                                          <th className="py-3 px-4 text-center">原價</th>
+                                          <th className="py-3 px-4 text-center">新價格 (可手動輸入)</th>
+                                          <th className="py-3 px-4 text-center">調價幅度</th>
+                                          <th className="py-3 px-4 text-right">單項微調</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-zinc-100">
+                                        {filteredStoreDishes.map(dish => {
+                                          const item = batchDishItems[dish.id] || {
+                                            id: dish.id,
+                                            storeId: dish.storeId,
+                                            name: dish.name,
+                                            category: dish.category || '',
+                                            originalPrice: dish.price,
+                                            newPrice: dish.price
+                                          };
+                                          const diff = item.newPrice - item.originalPrice;
+                                          const isSelected = batchSelectedDishIds.includes(dish.id);
+                                          const isModified = diff !== 0;
+
+                                          return (
+                                            <tr 
+                                              key={dish.id} 
+                                              className={cn(
+                                                "transition-colors",
+                                                isModified ? "bg-orange-50/50 hover:bg-orange-50/70" : "hover:bg-zinc-50/80"
+                                              )}
+                                            >
+                                              {/* Checkbox */}
+                                              <td className="py-3 px-4 text-center">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={isSelected}
+                                                  onChange={() => toggleSelectDish(dish.id)}
+                                                  className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500 border-zinc-300 cursor-pointer"
+                                                />
+                                              </td>
+
+                                              {/* Name */}
+                                              <td className="py-3 px-4 font-bold text-zinc-900">
+                                                {item.name}
+                                              </td>
+
+                                              {/* Category */}
+                                              <td className="py-3 px-4">
+                                                <span className="text-[11px] px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-600 font-medium">
+                                                  {item.category || '未分類'}
+                                                </span>
+                                              </td>
+
+                                              {/* Original Price */}
+                                              <td className="py-3 px-4 text-center font-mono text-zinc-400 font-medium">
+                                                ${item.originalPrice}
+                                              </td>
+
+                                              {/* New Price Input */}
+                                              <td className="py-3 px-4 text-center">
+                                                <div className="inline-flex items-center gap-1">
+                                                  <span className="text-zinc-400 text-xs font-mono">$</span>
+                                                  <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={item.newPrice}
+                                                    onChange={e => {
+                                                      const val = parseFloat(e.target.value);
+                                                      updateSingleBatchPrice(dish.id, isNaN(val) ? 0 : val);
+                                                    }}
+                                                    className={cn(
+                                                      "w-20 px-2 py-1 text-center font-mono font-black text-sm rounded-lg border focus:outline-none transition-all",
+                                                      isModified
+                                                        ? "border-orange-500 ring-2 ring-orange-200 bg-white text-orange-600"
+                                                        : "border-zinc-200 bg-white text-zinc-800 focus:border-orange-500"
+                                                    )}
+                                                  />
+                                                </div>
+                                              </td>
+
+                                              {/* Difference Badge */}
+                                              <td className="py-3 px-4 text-center font-mono">
+                                                {diff > 0 ? (
+                                                  <span className="inline-flex items-center gap-0.5 text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                                                    <ArrowUpRight className="w-3 h-3" /> +${diff}
+                                                  </span>
+                                                ) : diff < 0 ? (
+                                                  <span className="inline-flex items-center gap-0.5 text-xs font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800">
+                                                    <ArrowDownRight className="w-3 h-3" /> -${Math.abs(diff)}
+                                                  </span>
+                                                ) : (
+                                                  <span className="text-xs text-zinc-300 font-normal">無變動</span>
+                                                )}
+                                              </td>
+
+                                              {/* Micro adjust */}
+                                              <td className="py-3 px-4 text-right">
+                                                <div className="flex items-center justify-end gap-1">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => updateSingleBatchPrice(dish.id, item.newPrice - 5)}
+                                                    className="px-1.5 py-0.5 hover:bg-zinc-200 rounded text-zinc-500 text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                                                    title="價格 -5"
+                                                  >
+                                                    -5
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => updateSingleBatchPrice(dish.id, item.newPrice + 5)}
+                                                    className="px-1.5 py-0.5 hover:bg-orange-100 hover:text-orange-600 rounded text-zinc-500 text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                                                    title="價格 +5"
+                                                  >
+                                                    +5
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => updateSingleBatchPrice(dish.id, item.newPrice + 10)}
+                                                    className="px-1.5 py-0.5 hover:bg-orange-100 hover:text-orange-600 rounded text-zinc-500 text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                                                    title="價格 +10"
+                                                  >
+                                                    +10
+                                                  </button>
+                                                  {isModified && (
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => updateSingleBatchPrice(dish.id, item.originalPrice)}
+                                                      className="p-1 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                                                      title="還原回原價"
+                                                    >
+                                                      <RotateCcw className="w-3.5 h-3.5" />
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+
+                                {/* Sticky Bottom Bar */}
+                                <div className="sticky bottom-4 z-40 bg-zinc-900 text-white p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row justify-between items-center gap-3 border border-zinc-800">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-9 h-9 rounded-xl bg-orange-600 flex items-center justify-center font-bold text-white shrink-0 shadow-sm">
+                                      <TrendingUp className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                      <div className="font-bold text-sm">
+                                        {modifiedBatchDishes.length > 0 ? (
+                                          <span>
+                                            已修改 <span className="text-orange-400 font-mono text-base font-black">{modifiedBatchDishes.length}</span> 筆菜色價格
+                                          </span>
+                                        ) : (
+                                          <span className="text-zinc-400">尚未修改任何價格</span>
+                                        )}
+                                      </div>
+                                      <p className="text-[11px] text-zinc-400">確認儲存後將一次性更新至資料庫</p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={exitBatchEditMode}
+                                      className="bg-transparent border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white flex-1 sm:flex-initial text-xs py-2 px-3.5 cursor-pointer"
+                                    >
+                                      放棄變更退出
+                                    </Button>
+                                    <Button
+                                      disabled={modifiedBatchDishes.length === 0 || batchSaving}
+                                      onClick={() => setShowBatchConfirmModal(true)}
+                                      className={cn(
+                                        "font-bold flex-1 sm:flex-initial text-xs py-2 px-4 shadow-lg transition-all",
+                                        modifiedBatchDishes.length > 0
+                                          ? "bg-orange-600 hover:bg-orange-700 text-white ring-2 ring-orange-400/50 cursor-pointer"
+                                          : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                                      )}
+                                    >
+                                      確認儲存變更 ({modifiedBatchDishes.length} 筆)
+                                    </Button>
+                                  </div>
+                                </div>
                               </div>
                             ) : (
-                              <div className="py-20 text-center bg-zinc-50 rounded-3xl border border-dashed border-zinc-200">
-                                <Utensils className="w-12 h-12 text-zinc-200 mx-auto mb-4" />
-                                <p className="text-zinc-400 font-medium">此店家目前沒有菜色</p>
-                                <p className="text-xs text-zinc-300 mt-1">請使用上方表單新增菜色</p>
-                              </div>
+                              /* Normal View */
+                              storeDishes.length > 0 ? (
+                                <div className="grid grid-cols-1 gap-8">
+                                  {categories.map(cat => (
+                                    <div key={cat} className="space-y-4">
+                                      <h4 className="text-xs font-black text-zinc-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+                                        {cat}
+                                      </h4>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {storeDishes.filter(d => (d.category || '未分類') === cat).map(dish => (
+                                          <div key={dish.id} className="p-4 rounded-2xl border border-zinc-100 flex justify-between items-center bg-white hover:border-orange-200 hover:shadow-md hover:shadow-orange-500/5 transition-all">
+                                            <div>
+                                              <div className="font-bold text-zinc-800">{dish.name}</div>
+                                              <div className="text-orange-600 font-black mt-1">
+                                                <span className="text-[10px] mr-0.5">$</span>
+                                                {dish.price}
+                                              </div>
+                                            </div>
+                                            <div className="flex items-center gap-1 transition-opacity">
+                                              <button 
+                                                onClick={() => startEditDish(dish)}
+                                                className="p-2 text-zinc-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-all"
+                                                title={t('edit')}
+                                              >
+                                                <Edit2 className="w-4 h-4" />
+                                              </button>
+                                              <button 
+                                                onClick={() => setConfirmDelete({ col: 'dishes', id: dish.id })} 
+                                                className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                                title={t('delete')}
+                                              >
+                                                <Trash2 className="w-4 h-4" />
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="py-20 text-center bg-zinc-50 rounded-3xl border border-dashed border-zinc-200">
+                                  <Utensils className="w-12 h-12 text-zinc-200 mx-auto mb-4" />
+                                  <p className="text-zinc-400 font-medium">此店家目前沒有菜色</p>
+                                  <p className="text-xs text-zinc-300 mt-1">請使用上方表單新增菜色</p>
+                                </div>
+                              )
                             )}
                           </div>
                         );
@@ -3600,6 +4466,514 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                   onClick={() => setFallbackCopyText(null)}
                 >
                   關閉
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* User Order Edit Modal */}
+      <AnimatePresence>
+        {showUserOrderEditModal && userEditingOrder && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-zinc-900/40 backdrop-blur-sm"
+              onClick={() => setShowUserOrderEditModal(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 sm:p-8 flex flex-col max-h-[90vh] border border-zinc-100 my-auto overflow-hidden"
+            >
+              {/* Header */}
+              <div className="flex justify-between items-center pb-4 border-b border-zinc-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-orange-100 flex items-center justify-center text-orange-600 font-bold shrink-0">
+                    <ShoppingBag className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-zinc-900">修改訂單內容</h3>
+                    {(() => {
+                      const orderPlan = plans.find(p => p.id === userEditingOrder.planId);
+                      const orderStore = stores.find(s => s.id === orderPlan?.storeId);
+                      return (
+                        <p className="text-xs text-zinc-400 mt-0.5">
+                          {orderPlan?.name || '團購方案'} · {orderStore?.name || '店家'}
+                        </p>
+                      );
+                    })()}
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowUserOrderEditModal(false)} 
+                  className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-400 hover:text-zinc-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="space-y-5 py-4 overflow-y-auto pr-1">
+                {/* User Name */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-zinc-600">訂購人姓名</label>
+                  <input
+                    type="text"
+                    value={userEditUserName}
+                    onChange={e => setUserEditUserName(e.target.value)}
+                    placeholder="請輸入姓名"
+                    className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 text-sm focus:outline-none focus:border-orange-500 font-medium bg-white"
+                  />
+                </div>
+
+                {/* Dish Selector */}
+                {(() => {
+                  const orderPlan = plans.find(p => p.id === userEditingOrder.planId);
+                  const storeDishes = orderPlan ? dishes.filter(d => d.storeId === orderPlan.storeId) : [];
+                  const filteredDishes = storeDishes.filter(d => {
+                    if (!userEditSearchDish.trim()) return true;
+                    const q = userEditSearchDish.toLowerCase();
+                    return d.name.toLowerCase().includes(q) || (d.category && d.category.toLowerCase().includes(q));
+                  });
+
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-zinc-600">選擇餐點</label>
+                        <span className="text-[11px] text-zinc-400">點擊品項即可選取</span>
+                      </div>
+
+                      {storeDishes.length > 5 && (
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={userEditSearchDish}
+                            onChange={e => setUserEditSearchDish(e.target.value)}
+                            placeholder="快速搜尋餐點或分類..."
+                            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-zinc-200 focus:outline-none focus:border-orange-500"
+                          />
+                          <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-2.5" />
+                        </div>
+                      )}
+
+                      <div className="max-h-48 overflow-y-auto space-y-1.5 border border-zinc-200 rounded-xl p-2 bg-zinc-50/50">
+                        {filteredDishes.length > 0 ? (
+                          filteredDishes.map(dish => {
+                            const isSelected = userEditDishId === dish.id;
+                            return (
+                              <div
+                                key={dish.id}
+                                onClick={() => setUserEditDishId(dish.id)}
+                                className={cn(
+                                  "px-3 py-2.5 rounded-xl cursor-pointer transition-all flex items-center justify-between text-sm",
+                                  isSelected 
+                                    ? "bg-orange-500 text-white font-bold shadow-sm ring-2 ring-orange-400 ring-offset-1" 
+                                    : "bg-white hover:bg-zinc-100 text-zinc-800 border border-zinc-100"
+                                )}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span>{dish.name}</span>
+                                  {dish.category && (
+                                    <span className={cn(
+                                      "text-[10px] px-1.5 py-0.5 rounded font-normal",
+                                      isSelected ? "bg-orange-600 text-white" : "bg-zinc-100 text-zinc-500"
+                                    )}>
+                                      {dish.category}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className={cn(
+                                  "font-mono font-bold",
+                                  isSelected ? "text-white" : "text-orange-600"
+                                )}>
+                                  ${dish.price}
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="py-6 text-center text-xs text-zinc-400">
+                            {storeDishes.length === 0 ? '此店家尚無菜色' : '查無符合的菜色'}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Quantity */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-zinc-600">購買數量</label>
+                  <div className="flex items-center bg-zinc-100 p-1 rounded-xl border border-zinc-200 max-w-[200px]">
+                    <button 
+                      type="button"
+                      onClick={() => setUserEditQuantity(Math.max(1, userEditQuantity - 1))}
+                      className="w-10 h-10 rounded-lg bg-white shadow-sm flex items-center justify-center hover:bg-zinc-50 transition-all active:scale-95"
+                    >
+                      <Minus className="w-4 h-4 text-zinc-600" />
+                    </button>
+                    <input 
+                      type="number"
+                      min="1"
+                      value={userEditQuantity}
+                      onChange={e => setUserEditQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full text-center bg-transparent font-bold font-display text-base border-none focus:outline-none"
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setUserEditQuantity(userEditQuantity + 1)}
+                      className="w-10 h-10 rounded-lg bg-white shadow-sm flex items-center justify-center hover:bg-zinc-50 transition-all active:scale-95"
+                    >
+                      <Plus className="w-4 h-4 text-zinc-600" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Subtotal Preview */}
+                {(() => {
+                  const currentDish = dishes.find(d => d.id === userEditDishId);
+                  const totalPrice = (currentDish?.price || 0) * userEditQuantity;
+                  return (
+                    <div className="p-3.5 bg-orange-50/60 rounded-2xl border border-orange-100 flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-1.5 text-zinc-600 text-xs">
+                        <span>預估小計金額：</span>
+                        <span className="text-zinc-400">{currentDish ? `${currentDish.name} × ${userEditQuantity}` : '尚未選取餐點'}</span>
+                      </div>
+                      <div className="text-lg font-black text-orange-600 font-mono">
+                        ${totalPrice}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Footer */}
+              <div className="flex gap-3 pt-4 border-t border-zinc-100 mt-2">
+                <Button 
+                  variant="outline" 
+                  className="flex-1 py-2.5" 
+                  onClick={() => setShowUserOrderEditModal(false)}
+                  disabled={userEditSaving}
+                >
+                  取消
+                </Button>
+                <Button 
+                  className="flex-1 py-2.5 font-bold" 
+                  onClick={saveUserOrderEdit}
+                  disabled={userEditSaving || !userEditUserName.trim() || !userEditDishId}
+                >
+                  {userEditSaving ? '儲存中...' : '確認修改'}
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Store Edit Modal */}
+      <AnimatePresence>
+        {showEditStoreModal && editingStore && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-zinc-900/40 backdrop-blur-sm"
+              onClick={() => setShowEditStoreModal(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 sm:p-8 flex flex-col border border-zinc-100 my-auto overflow-hidden"
+            >
+              {/* Header */}
+              <div className="flex justify-between items-center pb-4 border-b border-zinc-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-orange-100 flex items-center justify-center text-orange-600 font-bold shrink-0">
+                    <Store className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-zinc-900">編輯店家</h3>
+                    <p className="text-xs text-zinc-400 mt-0.5">修改店家名稱與相關說明備註</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowEditStoreModal(false)} 
+                  className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-400 hover:text-zinc-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="space-y-4 py-4">
+                <Input 
+                  label="店家名稱" 
+                  value={editStoreName} 
+                  onChange={setEditStoreName} 
+                  placeholder="例如：老王便當" 
+                />
+                <Input 
+                  label="店家描述 / 備註" 
+                  value={editStoreDescription} 
+                  onChange={setEditStoreDescription} 
+                  placeholder="例如：排骨飯很好吃、附電話或地址" 
+                />
+              </div>
+
+              {/* Footer */}
+              <div className="flex gap-3 pt-4 border-t border-zinc-100 mt-2">
+                <Button 
+                  variant="outline" 
+                  className="flex-1 py-2.5" 
+                  onClick={() => setShowEditStoreModal(false)}
+                  disabled={editStoreSaving}
+                >
+                  取消
+                </Button>
+                <Button 
+                  className="flex-1 py-2.5 font-bold" 
+                  onClick={saveEditStore}
+                  disabled={editStoreSaving || !editStoreName.trim()}
+                >
+                  {editStoreSaving ? '儲存中...' : '儲存修改'}
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Dish Edit Modal */}
+      <AnimatePresence>
+        {showEditDishModal && editingDish && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-zinc-900/40 backdrop-blur-sm"
+              onClick={() => setShowEditDishModal(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 sm:p-8 flex flex-col border border-zinc-100 my-auto overflow-hidden"
+            >
+              {/* Header */}
+              <div className="flex justify-between items-center pb-4 border-b border-zinc-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-orange-100 flex items-center justify-center text-orange-600 font-bold shrink-0">
+                    <Utensils className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-zinc-900">編輯菜色</h3>
+                    <p className="text-xs text-zinc-400 mt-0.5">修改餐點名稱、單價、所屬店家及分類</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowEditDishModal(false)} 
+                  className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-400 hover:text-zinc-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="space-y-4 py-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium text-zinc-600">所屬店家</label>
+                  <select 
+                    value={editDishStoreId} 
+                    onChange={e => setEditDishStoreId(e.target.value)}
+                    className="px-4 py-2.5 rounded-xl border border-zinc-200 bg-white text-sm focus:outline-none focus:border-orange-500"
+                  >
+                    <option value="">選擇店家</option>
+                    {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+
+                <Input 
+                  label="菜色名稱" 
+                  value={editDishName} 
+                  onChange={setEditDishName} 
+                  placeholder="例如：招牌排骨飯" 
+                />
+
+                <Input 
+                  label="價格" 
+                  type="number" 
+                  value={editDishPrice} 
+                  onChange={setEditDishPrice} 
+                  placeholder="100" 
+                />
+
+                <div className="space-y-1.5">
+                  <Input 
+                    label="分類 (選填)" 
+                    value={editDishCategory} 
+                    onChange={setEditDishCategory} 
+                    placeholder="例如：主食、小菜、飲料" 
+                  />
+                  {/* Category suggestion chips from this store */}
+                  {(() => {
+                    const storeCategories = Array.from(new Set(
+                      dishes.filter(d => d.storeId === editDishStoreId && d.category).map(d => d.category as string)
+                    ));
+                    if (storeCategories.length === 0) return null;
+                    return (
+                      <div className="flex flex-wrap gap-1.5 pt-1 items-center">
+                        <span className="text-[11px] text-zinc-400">現有分類：</span>
+                        {storeCategories.map(cat => (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setEditDishCategory(cat)}
+                            className={cn(
+                              "text-[11px] px-2 py-0.5 rounded-lg border transition-all",
+                              editDishCategory === cat
+                                ? "bg-orange-100 text-orange-700 border-orange-200 font-bold"
+                                : "bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100"
+                            )}
+                          >
+                            {cat}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex gap-3 pt-4 border-t border-zinc-100 mt-2">
+                <Button 
+                  variant="outline" 
+                  className="flex-1 py-2.5" 
+                  onClick={() => setShowEditDishModal(false)}
+                  disabled={editDishSaving}
+                >
+                  取消
+                </Button>
+                <Button 
+                  className="flex-1 py-2.5 font-bold" 
+                  onClick={saveEditDish}
+                  disabled={editDishSaving || !editDishName.trim() || !editDishPrice || !editDishStoreId}
+                >
+                  {editDishSaving ? '儲存中...' : '儲存修改'}
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Batch Dish Price Change Confirmation Modal */}
+      <AnimatePresence>
+        {showBatchConfirmModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-zinc-900/50 backdrop-blur-sm"
+              onClick={() => !batchSaving && setShowBatchConfirmModal(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 sm:p-8 flex flex-col max-h-[85vh] border border-zinc-100 my-auto overflow-hidden"
+            >
+              {/* Header */}
+              <div className="flex justify-between items-center pb-4 border-b border-zinc-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-orange-100 flex items-center justify-center text-orange-600 font-bold shrink-0">
+                    <TrendingUp className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-zinc-900">確認批量價格變更</h3>
+                    <p className="text-xs text-zinc-400 mt-0.5">請確認即將寫入資料庫的菜色價格變更項目</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => !batchSaving && setShowBatchConfirmModal(false)} 
+                  className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-400 hover:text-zinc-600 cursor-pointer"
+                  disabled={batchSaving}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Items List */}
+              <div className="py-4 space-y-3 overflow-y-auto max-h-[45vh] pr-1">
+                {(() => {
+                  const modified = getModifiedBatchDishes();
+                  return (
+                    <div className="space-y-2">
+                      <div className="text-xs font-bold text-zinc-600 flex justify-between px-1">
+                        <span>預計更新品項 (共 {modified.length} 筆)</span>
+                        <span>調整結果</span>
+                      </div>
+                      <div className="divide-y divide-zinc-100 border border-zinc-100 rounded-2xl overflow-hidden bg-zinc-50/50">
+                        {modified.map(item => {
+                          const diff = item.newPrice - item.originalPrice;
+                          return (
+                            <div key={item.id} className="p-3 flex justify-between items-center text-xs">
+                              <div>
+                                <span className="font-bold text-zinc-800">{item.name}</span>
+                                {item.category && (
+                                  <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-zinc-200/60 text-zinc-500 font-medium">
+                                    {item.category}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 font-mono">
+                                <span className="text-zinc-400 line-through">${item.originalPrice}</span>
+                                <span className="text-zinc-400">→</span>
+                                <span className="font-bold text-orange-600 text-sm">${item.newPrice}</span>
+                                {diff > 0 ? (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                                    +${diff}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-800">
+                                    -${Math.abs(diff)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Footer */}
+              <div className="flex gap-3 pt-4 border-t border-zinc-100 mt-auto">
+                <Button 
+                  variant="outline" 
+                  className="flex-1 py-2.5 cursor-pointer" 
+                  onClick={() => setShowBatchConfirmModal(false)}
+                  disabled={batchSaving}
+                >
+                  返回修改
+                </Button>
+                <Button 
+                  className="flex-1 py-2.5 font-bold bg-orange-600 hover:bg-orange-700 text-white cursor-pointer" 
+                  onClick={saveBatchDishPrices}
+                  disabled={batchSaving}
+                >
+                  {batchSaving ? '儲存中...' : '確認批次更新'}
                 </Button>
               </div>
             </motion.div>

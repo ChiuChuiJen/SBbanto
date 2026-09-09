@@ -1,7 +1,9 @@
-export const APP_VERSION = "V1.5.9";
-export const APP_UPDATE_DATE = "2026-09-03";
+export const APP_VERSION = "V1.6.1";
+export const APP_UPDATE_DATE = "2026-09-08";
 
 export const VERSION_HISTORY = [
+  { version: 'V1.6.1', date: '2026-09-08', notes: ['菜色管理增加各店家「批量修改模式」：支援漲價時快速批次調價（全店/依分類/勾選品項一鍵+5、+10、自訂增減或百分比），並提供清單即時輸入與變更審核儲存'] },
+  { version: 'V1.6.0', date: '2026-09-08', notes: ['修改動作全面彈窗化：點擊訂單、店家或菜色修改時，改為跳出專屬編輯視窗，無需再手動往上滑動尋找輸入欄位'] },
   { version: 'V1.5.9', date: '2026-09-03', notes: ['修復明細彙整 A 區報單複製功能在不同瀏覽器與環境下失敗的問題，加入多重剪貼簿相容機制與備用複製視窗'] },
   { version: 'V1.5.8', date: '2026-09-03', notes: ['後台訂單管理：支援已結單方案新增與修改訂單功能（管理員補單與改單）'] },
   { version: 'V1.5.7', date: '2026-08-05', notes: ['頂部導覽列優化：將「捷徑設置」與「版本號」獨立於第二排，避免直式畫面擁擠'] },
