@@ -33,7 +33,9 @@ import {
   ArrowDownRight,
   Percent,
   CheckSquare,
-  Square
+  Square,
+  Megaphone,
+  Share2
 } from 'lucide-react';
 import { format, isAfter, parseISO, addDays, addHours } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
@@ -153,7 +155,8 @@ const Button = ({
   className, 
   disabled,
   type = 'button',
-  size
+  size,
+  title
 }: { 
   children: React.ReactNode; 
   onClick?: () => void; 
@@ -162,6 +165,7 @@ const Button = ({
   disabled?: boolean;
   type?: 'button' | 'submit';
   size?: string;
+  title?: string;
 }) => {
   const variants = {
     primary: 'bg-orange-600 text-white hover:bg-orange-700 shadow-md shadow-orange-500/20',
@@ -175,6 +179,7 @@ const Button = ({
       type={type}
       disabled={disabled}
       onClick={onClick}
+      title={title}
       className={cn(
         'px-5 py-2.5 rounded-xl font-semibold transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2 text-sm',
         variants[variant],
@@ -467,6 +472,14 @@ function AppContent() {
       whyTranslateDishes: "💡 為什麼網頁翻譯更方便？因為一般多國語言只能翻譯按鈕標籤，而網頁翻譯可以直接把「排骨飯、雞腿飯、控肉便當」等所有菜色即時翻譯成外籍同仁看得懂的文字！",
       restoreOriginalText: "還原繁體中文原版",
 
+      // Plan Notification / Share Modal
+      planNoticeButton: "方案通知",
+      planNoticeTitle: "📢 方案開團通知",
+      planNoticeDesc: "格式與新方案開團通知完全一致，可一鍵複製並發送至群組手動分享。",
+      copyNoticeContent: "一鍵複製通知內容",
+      shareToSocial: "分享至通訊軟體",
+      noticeCopiedSuccess: "🎉 已成功複製到剪貼簿！可直接貼上至 LINE 或 Telegram 群組分享。",
+
       // Admin Dashboard Info
       adminTitle: "管理後台",
       adminDesc: "管理店家、菜色與團購方案",
@@ -630,6 +643,14 @@ function AppContent() {
       chromeDesktopTip: "Desktop Chrome / Edge: Right-click anywhere on the page ➔ Select 'Translate to English / Vietnamese...'.",
       whyTranslateDishes: "💡 Why page translation is better: Standard UI language switchers only translate system buttons. Page translation automatically translates actual dish names (e.g. Pork Chop Rice, Chicken Bento) into your native language!",
       restoreOriginalText: "Restore Original Chinese",
+
+      // Plan Notification / Share Modal
+      planNoticeButton: "Plan Notice",
+      planNoticeTitle: "📢 Group Buy Plan Notice",
+      planNoticeDesc: "Formatted identical to new plan notifications. Copy with one click to share manually in chat groups.",
+      copyNoticeContent: "Copy Notice Content",
+      shareToSocial: "Share via Apps",
+      noticeCopiedSuccess: "🎉 Copied to clipboard! You can paste directly into LINE or Telegram groups.",
 
       // Admin Dashboard Info
       adminTitle: "Admin Dashboard",
@@ -795,6 +816,14 @@ function AppContent() {
       whyTranslateDishes: "💡 Tại sao dịch trang web tiện lợi hơn? Tính năng này sẽ tự động dịch tất cả tên món ăn (ví dụ: cơm sườn, cơm gà, món phụ...) sang tiếng mẹ đẻ của bạn!",
       restoreOriginalText: "Khôi phục tiếng Trung gốc",
 
+      // Plan Notification / Share Modal
+      planNoticeButton: "Thông báo",
+      planNoticeTitle: "📢 Thông báo mở gom đơn mới",
+      planNoticeDesc: "Định dạng giống với thông báo mở kế hoạch mới, sao chép một chạm để chia sẻ vào nhóm.",
+      copyNoticeContent: "Sao chép nội dung thông báo",
+      shareToSocial: "Chia sẻ qua ứng dụng",
+      noticeCopiedSuccess: "🎉 Đã sao chép vào bộ nhớ tạm! Bạn có thể dán trực tiếp vào nhóm LINE hoặc Telegram.",
+
       // Admin Dashboard Info
       adminTitle: "Bảng điều khiển quản trị",
       adminDesc: "Quản lý cửa hàng, món ăn và kế hoạch đặt món",
@@ -934,6 +963,8 @@ function AppContent() {
   const [reportPlanId, setReportPlanId] = useState<string | null>(null);
   const [showShortcutModal, setShowShortcutModal] = useState(false);
   const [showTranslateModal, setShowTranslateModal] = useState(false);
+  const [sharingPlan, setSharingPlan] = useState<Plan | null>(null);
+  const [copiedPlanNotice, setCopiedPlanNotice] = useState(false);
 
   const handleTranslatePage = (langCode: string) => {
     if (langCode === 'zh-TW' || langCode === 'zh') {
@@ -2447,10 +2478,22 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                               <button 
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  setSharingPlan(plan);
+                                  setCopiedPlanNotice(false);
+                                }}
+                                className="text-orange-700 hover:bg-orange-100 hover:text-orange-900 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                                title={t('planNoticeButton')}
+                              >
+                                <Megaphone className="w-3 h-3 text-orange-600" />
+                                <span>{t('planNoticeButton')}</span>
+                              </button>
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   setReportPlanId(plan.id);
                                   setShowReportModal(true);
                                 }}
-                                className="text-orange-600 hover:bg-orange-100 hover:text-orange-800 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition-colors flex items-center justify-center"
+                                className="text-orange-600 hover:bg-orange-100 hover:text-orange-800 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition-colors flex items-center justify-center cursor-pointer"
                                 title={t('reportModalTitle')}
                               >
                                 {t('report')}
@@ -2499,7 +2542,20 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
 
                 <div className="space-y-6">
                   <div className="space-y-2">
-                    <h2 className="text-3xl font-bold">{selectedPlan.name}</h2>
+                    <div className="flex items-center justify-between gap-4 flex-wrap">
+                      <h2 className="text-3xl font-bold">{selectedPlan.name}</h2>
+                      <button
+                        onClick={() => {
+                          setSharingPlan(selectedPlan);
+                          setCopiedPlanNotice(false);
+                        }}
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-orange-200 bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-bold transition-all shadow-2xs cursor-pointer shrink-0"
+                        title={t('planNoticeButton')}
+                      >
+                        <Megaphone className="w-3.5 h-3.5 text-orange-600" />
+                        <span>{t('planNoticeButton')}</span>
+                      </button>
+                    </div>
                     <p className="text-zinc-500">{t('fromStore')} {stores.find(s => s.id === selectedPlan.storeId)?.name || t('unknownStore')}</p>
                   </div>
 
@@ -2875,7 +2931,18 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                                 <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold">進行中</span>
                               )}
                             </td>
-                            <td className="py-4 px-4 flex items-center gap-3">
+                            <td className="py-4 px-4 flex items-center gap-2 flex-wrap">
+                              <button
+                                onClick={() => {
+                                  setSharingPlan(plan);
+                                  setCopiedPlanNotice(false);
+                                }}
+                                className="text-xs text-orange-700 hover:text-orange-800 font-bold bg-orange-50 hover:bg-orange-100 border border-orange-200/80 px-2.5 py-1 rounded-md transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                                title="查看並分享方案通知"
+                              >
+                                <Megaphone className="w-3.5 h-3.5 text-orange-600" />
+                                方案通知
+                              </button>
                               {!isPlanClosed && (
                                 <button 
                                   onClick={async () => {
@@ -2887,12 +2954,12 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                                       alert('方案已結單！');
                                     }
                                   }} 
-                                  className="text-xs text-orange-600 hover:text-orange-700 font-bold bg-orange-50 px-2 py-1 rounded-md"
+                                  className="text-xs text-orange-600 hover:text-orange-700 font-bold bg-orange-50 px-2 py-1 rounded-md cursor-pointer"
                                 >
                                   結單
                                 </button>
                               )}
-                              <button onClick={() => setConfirmDelete({ col: 'plans', id: plan.id })} className="text-zinc-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                              <button onClick={() => setConfirmDelete({ col: 'plans', id: plan.id })} className="text-zinc-400 hover:text-red-500 cursor-pointer p-1"><Trash2 className="w-4 h-4" /></button>
                             </td>
                           </tr>
                         )})}
@@ -3812,6 +3879,18 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                                 ))}
                               </div>
                               <div className="flex items-center gap-2 flex-wrap">
+                                <Button 
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSharingPlan(plan);
+                                    setCopiedPlanNotice(false);
+                                  }}
+                                  className="text-orange-700 border-orange-200 hover:bg-orange-50 text-xs py-2 px-3 rounded-xl flex items-center gap-1.5 font-bold cursor-pointer"
+                                  title="查看並手動分享方案通知"
+                                >
+                                  <Megaphone className="w-3.5 h-3.5 text-orange-600" />
+                                  方案通知
+                                </Button>
                                 <Button 
                                   onClick={() => openAdminCreateOrderModal(plan.id)}
                                   className="bg-orange-600 hover:bg-orange-700 text-white text-xs py-2 px-3.5 flex items-center gap-1.5 shadow-sm rounded-xl font-bold"
@@ -5882,6 +5961,111 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
             </motion.div>
           </div>
         )}
+
+        {/* Plan Notification / Manual Share Modal */}
+        {sharingPlan && (() => {
+          const store = stores.find(s => s.id === sharingPlan.storeId);
+          const formattedClosingTime = sharingPlan.closingTime ? sharingPlan.closingTime.replace('T', ' ') : '';
+          const shareText = `📢 新方案開團通知\n\n方案名: ${sharingPlan.name}\n店家: ${store?.name || '未知'}\n用餐日期: ${sharingPlan.diningDate}\n截止時間: ${formattedClosingTime}\n\n🔗 前往訂單系統：\nhttps://s-bbanto.vercel.app/`;
+
+          const handleCopy = async () => {
+            const success = await copyToClipboard(shareText);
+            if (success) {
+              setCopiedPlanNotice(true);
+              setTimeout(() => setCopiedPlanNotice(false), 3000);
+            } else {
+              setFallbackCopyText(shareText);
+            }
+          };
+
+          const handleNativeShare = async () => {
+            if (typeof navigator !== 'undefined' && navigator.share) {
+              try {
+                await navigator.share({
+                  title: `新方案開團通知 - ${sharingPlan.name}`,
+                  text: shareText,
+                  url: 'https://s-bbanto.vercel.app/',
+                });
+              } catch (err) {
+                // User dismissed
+              }
+            }
+          };
+
+          return (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="relative bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 sm:p-8 flex flex-col max-h-[90vh] border border-zinc-100 overflow-y-auto"
+              >
+                <div className="flex justify-between items-start mb-5 sticky top-0 bg-white z-10 pb-2 border-b border-zinc-100">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-2xl bg-orange-100 flex items-center justify-center text-orange-600 shrink-0">
+                      <Megaphone className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-zinc-900">{t('planNoticeTitle')}</h3>
+                      <p className="text-xs text-zinc-500 mt-0.5">{t('planNoticeDesc')}</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => { setSharingPlan(null); setCopiedPlanNotice(false); }} 
+                    className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-400 hover:text-zinc-700 shrink-0 ml-2 cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-5">
+                  {/* Notification text display card */}
+                  <div className="relative bg-zinc-50 rounded-2xl p-4 sm:p-5 border border-zinc-200/80 font-mono text-xs sm:text-sm text-zinc-800 leading-relaxed whitespace-pre-wrap select-all shadow-inner">
+                    {shareText}
+                  </div>
+
+                  {/* Feedback on copy */}
+                  {copiedPlanNotice && (
+                    <div className="flex items-center gap-2 p-3 bg-green-50 text-green-700 rounded-xl border border-green-200 text-xs font-bold animate-in fade-in duration-200">
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      <span>{t('noticeCopiedSuccess')}</span>
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-2">
+                    <Button
+                      onClick={handleCopy}
+                      className="w-full sm:flex-1 py-3 font-bold flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white shadow-md rounded-xl cursor-pointer"
+                    >
+                      {copiedPlanNotice ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      <span>{copiedPlanNotice ? t('copied') : t('copyNoticeContent')}</span>
+                    </Button>
+
+                    {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
+                      <Button
+                        variant="outline"
+                        onClick={handleNativeShare}
+                        className="w-full sm:w-auto py-3 px-4 font-bold flex items-center justify-center gap-2 border-zinc-200 hover:bg-zinc-50 rounded-xl text-zinc-700 cursor-pointer"
+                      >
+                        <Share2 className="w-4 h-4" />
+                        <span>{t('shareToSocial')}</span>
+                      </Button>
+                    )}
+
+                    <Button
+                      variant="outline"
+                      onClick={() => { setSharingPlan(null); setCopiedPlanNotice(false); }}
+                      className="w-full sm:w-auto py-3 px-4 font-bold rounded-xl border-zinc-200 text-zinc-600 hover:bg-zinc-100 cursor-pointer"
+                    >
+                      {t('cancel')}
+                    </Button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
       </AnimatePresence>
 
     </div>

@@ -1,7 +1,14 @@
-export const APP_VERSION = "V1.7.0";
+export const APP_VERSION = "V1.7.1";
 export const APP_UPDATE_DATE = "2026-09-08";
 
 export const VERSION_HISTORY = [
+  { 
+    version: 'V1.7.1', 
+    date: '2026-09-08', 
+    notes: [
+      '前台與後台方案增加「方案通知」功能：點擊彈出新方案開團通知視窗，提供一鍵複製與快捷分享功能，方便手動分享至 LINE 或 Telegram 群組'
+    ] 
+  },
   { 
     version: 'V1.7.0', 
     date: '2026-09-08', 
