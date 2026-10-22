@@ -108,6 +108,8 @@ interface Plan {
   diningDate: string;
   closingTime: string;
   isClosed?: boolean;
+  isDeleted?: boolean;
+  deletedAt?: string;
 }
 
 interface Order {
@@ -857,7 +859,10 @@ function AppContent() {
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [dishes, setDishes] = useState<Dish[]>([]);
-  const [plans, setPlans] = useState<Plan[]>([]);
+  const [rawPlans, setRawPlans] = useState<Plan[]>([]);
+  const plans = rawPlans.filter(p => !p.isDeleted);
+  const trashedPlans = rawPlans.filter(p => p.isDeleted);
+  const [planTrashNotice, setPlanTrashNotice] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
   const [tgSettings, setTgSettings] = useState<TgSettings>({
@@ -878,7 +883,7 @@ function AppContent() {
   });
   const [showAnnouncement, setShowAnnouncement] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [confirmDelete, setConfirmDelete] = useState<{ col: string, id: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ col: string, id: string, step?: 1 | 2 } | null>(null);
 
   // User State
   const [userTab, setUserTab] = useState<'plans' | 'all-orders'>('plans');
@@ -1058,7 +1063,7 @@ function AppContent() {
     }, (error) => handleFirestoreError(error, OperationType.GET, 'dishes'));
 
     const unsubPlans = onSnapshot(collection(db, 'plans'), (snapshot) => {
-      setPlans(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Plan)));
+      setRawPlans(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Plan)));
     }, (error) => handleFirestoreError(error, OperationType.GET, 'plans'));
 
     const unsubOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
@@ -1142,12 +1147,41 @@ function AppContent() {
     return () => clearInterval(interval);
   }, [plans, tgSettings, lineSettings, user, isSuperAdmin, adminUsers]);
 
-  // Cleanup old plans: Dining Date + 1 day at 20:00
+  // Cleanup old plans (Dining Date + 1 day at 20:00) and expired trashed plans (2 days in trash)
   useEffect(() => {
-    if (!plans.length || !isSuperAdmin) return;
+    if (!rawPlans.length) return;
+    const canManagePlans = isSuperAdmin || adminUsers.some(u => u.email.toLowerCase() === user?.email?.toLowerCase() && u.permissions.plans);
+    if (!canManagePlans) return;
 
     const cleanup = async () => {
       const now = new Date();
+
+      // 1. Permanently delete trashed plans after 2 days (48 hours)
+      const expiredTrashPlans = trashedPlans.filter(plan => {
+        if (!plan.deletedAt) return false;
+        try {
+          const expireTime = addDays(parseISO(plan.deletedAt), 2);
+          return isAfter(now, expireTime);
+        } catch (e) {
+          return false;
+        }
+      });
+
+      for (const plan of expiredTrashPlans) {
+        try {
+          await deleteDoc(doc(db, 'plans', plan.id));
+          const planOrders = orders.filter(o => o.planId === plan.id);
+          for (const order of planOrders) {
+            await deleteDoc(doc(db, 'orders', order.id));
+          }
+          console.log(`Auto-removed expired trash plan (2 days): ${plan.name}`);
+        } catch (error) {
+          console.error(`Error removing expired trash plan ${plan.id}:`, error);
+        }
+      }
+
+      // 2. SuperAdmin cleanup for old active plans: Dining Date + 1 day at 20:00
+      if (!isSuperAdmin) return;
       const oldPlans = plans.filter(plan => {
         try {
           const diningDate = parseISO(plan.diningDate);
@@ -1175,7 +1209,7 @@ function AppContent() {
     };
 
     cleanup();
-  }, [plans, orders, isSuperAdmin]);
+  }, [rawPlans, plans, trashedPlans, orders, isSuperAdmin, adminUsers, user]);
 
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
@@ -2236,12 +2270,52 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
         if (admin) {
           await removeAdminUser(admin.id, admin.email, admin.password);
         }
+      } else if (col === 'plans') {
+        const targetPlan = rawPlans.find(p => p.id === id);
+        if (targetPlan) {
+          await setDoc(doc(db, 'plans', id), {
+            ...targetPlan,
+            isDeleted: true,
+            deletedAt: new Date().toISOString()
+          }, { merge: true });
+          if (selectedPlan?.id === id) {
+            setSelectedPlan(null);
+          }
+          setPlanTrashNotice(`🗑️ 方案「${targetPlan.name}」已移至下方刪除暫存區（保留 2 天，期間內可隨時復原）`);
+          setTimeout(() => setPlanTrashNotice(null), 6000);
+        }
+      } else if (col === 'plans_permanent') {
+        const targetPlan = rawPlans.find(p => p.id === id);
+        await deleteDoc(doc(db, 'plans', id));
+        const planOrders = orders.filter(o => o.planId === id);
+        for (const order of planOrders) {
+          await deleteDoc(doc(db, 'orders', order.id));
+        }
+        if (targetPlan) {
+          setPlanTrashNotice(`🗑️ 已永久刪除方案「${targetPlan.name}」及所屬 ${planOrders.length} 筆訂單`);
+          setTimeout(() => setPlanTrashNotice(null), 5000);
+        }
       } else {
         await deleteDoc(doc(db, col, id));
       }
       setConfirmDelete(null);
     } catch (e) {
-      handleFirestoreError(e, OperationType.DELETE, col);
+      handleFirestoreError(e, col === 'plans' ? OperationType.WRITE : OperationType.DELETE, col === 'plans_permanent' ? 'plans' : col);
+    }
+  };
+
+  const restorePlan = async (plan: Plan) => {
+    try {
+      await setDoc(doc(db, 'plans', plan.id), {
+        ...plan,
+        isDeleted: false,
+        deletedAt: ''
+      }, { merge: true });
+      const planOrdersCount = orders.filter(o => o.planId === plan.id).length;
+      setPlanTrashNotice(`✅ 已成功復原方案「${plan.name}」（包含 ${planOrdersCount} 筆訂單）！`);
+      setTimeout(() => setPlanTrashNotice(null), 5000);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, 'plans');
     }
   };
 
@@ -2903,6 +2977,18 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                     <Button onClick={addPlan} className="md:col-span-4 mt-2"><Plus className="w-4 h-4 inline mr-2" /> 新增方案</Button>
                   </div>
 
+                  {planTrashNotice && (
+                    <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl flex items-center justify-between text-sm font-bold shadow-2xs">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>{planTrashNotice}</span>
+                      </div>
+                      <button onClick={() => setPlanTrashNotice(null)} className="text-amber-600 hover:text-amber-800 p-1 cursor-pointer">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
                   <div className="overflow-x-auto">
                     <table className="w-full text-left">
                       <thead>
@@ -2959,12 +3045,131 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
                                   結單
                                 </button>
                               )}
-                              <button onClick={() => setConfirmDelete({ col: 'plans', id: plan.id })} className="text-zinc-400 hover:text-red-500 cursor-pointer p-1"><Trash2 className="w-4 h-4" /></button>
+                              <button
+                                onClick={() => setConfirmDelete({ col: 'plans', id: plan.id, step: 1 })}
+                                className="text-zinc-400 hover:text-red-500 cursor-pointer p-1"
+                                title="刪除方案（需二次確認，移至暫存區保留 2 天）"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </td>
                           </tr>
                         )})}
+                        {plans.length === 0 && (
+                          <tr>
+                            <td colSpan={6} className="py-10 text-center text-zinc-400 text-sm">目前尚無進行中或已結單的方案</td>
+                          </tr>
+                        )}
                       </tbody>
                     </table>
+                  </div>
+
+                  {/* 刪除暫存區 (保留 2 天，避免誤刪，可回復) */}
+                  <div className="pt-6 border-t border-zinc-200/80 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-amber-50/70 p-4 rounded-2xl border border-amber-200/80">
+                      <div className="flex items-start sm:items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                          <RotateCcw className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="font-bold text-zinc-900 text-base">刪除暫存區 (保留 2 天)</h4>
+                            <span className={cn(
+                              "text-xs px-2.5 py-0.5 rounded-full font-bold",
+                              trashedPlans.length > 0 ? "bg-amber-600 text-white" : "bg-zinc-200 text-zinc-600"
+                            )}>
+                              {trashedPlans.length} 筆暫存中
+                            </span>
+                          </div>
+                          <p className="text-xs text-zinc-600 mt-0.5">
+                            為避免誤刪，被刪除的方案與訂單會暫存於此處 <strong>2 天 (48 小時)</strong>，期間可隨時點擊「復原方案」救回；超過 2 天將自動永久清除。
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {trashedPlans.length > 0 ? (
+                      <div className="overflow-x-auto bg-zinc-50/70 rounded-2xl border border-zinc-200/80">
+                        <table className="w-full text-left text-sm">
+                          <thead>
+                            <tr className="border-b border-zinc-200/70 text-zinc-500 text-xs uppercase tracking-wider">
+                              <th className="py-3 px-4 font-bold">暫存方案名稱</th>
+                              <th className="py-3 px-4 font-bold">店家</th>
+                              <th className="py-3 px-4 font-bold">用餐日期</th>
+                              <th className="py-3 px-4 font-bold">保留訂單數</th>
+                              <th className="py-3 px-4 font-bold">刪除時間 / 自動清除倒數</th>
+                              <th className="py-3 px-4 font-bold">操作</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-200/50">
+                            {trashedPlans.map(plan => {
+                              const store = stores.find(s => s.id === plan.storeId);
+                              const planOrdersCount = orders.filter(o => o.planId === plan.id).length;
+                              let deletedTimeStr = '未知';
+                              let expireInfoStr = '2 天後自動清除';
+                              if (plan.deletedAt) {
+                                try {
+                                  const delDate = parseISO(plan.deletedAt);
+                                  const expDate = addDays(delDate, 2);
+                                  deletedTimeStr = format(delDate, 'MM/dd HH:mm');
+                                  const diffMs = Math.max(0, expDate.getTime() - Date.now());
+                                  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                                  const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                                  const daysLeft = Math.floor(diffHours / 24);
+                                  const hoursLeft = diffHours % 24;
+                                  expireInfoStr = daysLeft > 0
+                                    ? `剩餘 ${daysLeft} 天 ${hoursLeft} 小時 (${format(expDate, 'MM/dd HH:mm')} 清除)`
+                                    : `剩餘 ${hoursLeft} 小時 ${diffMins} 分 (${format(expDate, 'MM/dd HH:mm')} 清除)`;
+                                } catch (e) {
+                                  // fallback
+                                }
+                              }
+
+                              return (
+                                <tr key={plan.id} className="hover:bg-amber-50/40 transition-colors">
+                                  <td className="py-3.5 px-4 font-bold text-zinc-800">{plan.name}</td>
+                                  <td className="py-3.5 px-4 text-zinc-600">{store?.name || '未知店家'}</td>
+                                  <td className="py-3.5 px-4 text-zinc-600">{plan.diningDate}</td>
+                                  <td className="py-3.5 px-4">
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-zinc-200 text-zinc-700">
+                                      {planOrdersCount} 筆訂單
+                                    </span>
+                                  </td>
+                                  <td className="py-3.5 px-4">
+                                    <div className="text-xs text-zinc-600">刪除於：{deletedTimeStr}</div>
+                                    <div className="text-[11px] font-bold text-amber-700 mt-0.5">{expireInfoStr}</div>
+                                  </td>
+                                  <td className="py-3.5 px-4">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <button
+                                        onClick={() => restorePlan(plan)}
+                                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                                        title="立即將此方案與所屬訂單復原回正常列表"
+                                      >
+                                        <RotateCcw className="w-3.5 h-3.5" />
+                                        復原方案
+                                      </button>
+                                      <button
+                                        onClick={() => setConfirmDelete({ col: 'plans_permanent', id: plan.id })}
+                                        className="px-2.5 py-1.5 rounded-lg border border-red-200 bg-white hover:bg-red-50 text-red-600 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                                        title="不等待 2 天，立即永久刪除此方案與訂單"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                        永久刪除
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="py-6 text-center bg-zinc-50 rounded-2xl border border-dashed border-zinc-200 text-xs text-zinc-400">
+                        目前刪除暫存區沒有任何方案
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -4469,48 +4674,184 @@ ${adminOrderUserName.trim()} - ${dish?.name || '未知菜色'} x${q} (金額: $$
 
       {/* Confirmation Modal */}
       <AnimatePresence>
-        {confirmDelete && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setConfirmDelete(null)}
-              className="absolute inset-0 bg-zinc-900/40 backdrop-blur-sm"
-            />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative bg-white -zinc-900 rounded-3xl shadow-2xl max-w-sm w-full p-8 space-y-6 border border-zinc-100 -zinc-800"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="w-16 h-16 bg-red-50 -red-900/20 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
-                <AlertCircle className="w-8 h-8 text-red-500" />
-              </div>
-              <div className="text-center space-y-2">
-                <h3 className="text-2xl font-display font-black tracking-tight">{t('confirmDeleteTitle')}</h3>
-                <p className="text-zinc-500 -zinc-400 font-medium">{t('confirmDeleteDesc')}</p>
-              </div>
-              <div className="flex gap-3">
-                <Button 
-                  variant="outline" 
-                  className="flex-1 py-3" 
-                  onClick={() => setConfirmDelete(null)}
-                >
-                  {t('cancel')}
-                </Button>
-                <Button 
-                  variant="danger" 
-                  className="flex-1 py-3" 
-                  onClick={() => deleteItem(confirmDelete.col, confirmDelete.id)}
-                >
-                  {t('confirmDeleteBtn')}
-                </Button>
-              </div>
-            </motion.div>
-          </div>
-        )}
+        {confirmDelete && (() => {
+          const isPlanSoftDelete = confirmDelete.col === 'plans';
+          const isPlanPermDelete = confirmDelete.col === 'plans_permanent';
+          const targetPlan = (isPlanSoftDelete || isPlanPermDelete)
+            ? rawPlans.find(p => p.id === confirmDelete.id)
+            : null;
+          const targetStore = targetPlan ? stores.find(s => s.id === targetPlan.storeId) : null;
+          const planOrdersCount = targetPlan ? orders.filter(o => o.planId === targetPlan.id).length : 0;
+          const currentStep = confirmDelete.step || 1;
+
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setConfirmDelete(null)}
+                className="absolute inset-0 bg-zinc-900/40 backdrop-blur-sm"
+              />
+              <motion.div 
+                key={`${confirmDelete.col}-${confirmDelete.id}-${currentStep}`}
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="relative bg-white -zinc-900 rounded-3xl shadow-2xl max-w-md w-full p-8 space-y-6 border border-zinc-100 -zinc-800"
+                onClick={e => e.stopPropagation()}
+              >
+                {isPlanSoftDelete ? (
+                  currentStep === 1 ? (
+                    <>
+                      <div className="flex flex-col items-center gap-2">
+                        <span className="px-3 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-800 border border-amber-200">
+                          第一次確認 (1 / 2)
+                        </span>
+                        <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto shadow-inner mt-1">
+                          <AlertCircle className="w-8 h-8 text-amber-500" />
+                        </div>
+                      </div>
+                      <div className="text-center space-y-2">
+                        <h3 className="text-2xl font-display font-black tracking-tight text-zinc-900">確認要刪除方案？</h3>
+                        <p className="text-sm text-zinc-500 font-medium">
+                          為避免誤刪，刪除後方案將移至「刪除暫存區」保留 2 天，期間內可隨時復原。
+                        </p>
+                      </div>
+                      {targetPlan && (
+                        <div className="bg-zinc-50 p-4 rounded-2xl border border-zinc-200/80 text-xs space-y-1.5 text-zinc-700">
+                          <div className="flex justify-between">
+                            <span className="text-zinc-400 font-semibold">方案名稱：</span>
+                            <span className="font-bold text-zinc-900">{targetPlan.name}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-400 font-semibold">綁定店家：</span>
+                            <span className="font-bold">{targetStore?.name || '未知店家'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-400 font-semibold">用餐日期：</span>
+                            <span className="font-bold">{targetPlan.diningDate}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-400 font-semibold">目前訂單數：</span>
+                            <span className="font-bold text-orange-600">{planOrdersCount} 筆訂單</span>
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex gap-3">
+                        <Button 
+                          variant="outline" 
+                          className="flex-1 py-3 cursor-pointer" 
+                          onClick={() => setConfirmDelete(null)}
+                        >
+                          {t('cancel')}
+                        </Button>
+                        <Button 
+                          className="flex-1 py-3 bg-amber-600 hover:bg-amber-700 text-white cursor-pointer" 
+                          onClick={() => setConfirmDelete({ ...confirmDelete, step: 2 })}
+                        >
+                          下一步 (二次確認)
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex flex-col items-center gap-2">
+                        <span className="px-3 py-1 rounded-full text-xs font-black bg-red-100 text-red-700 border border-red-200">
+                          ⚠️ 第二次確認 — 最後確認 (2 / 2)
+                        </span>
+                        <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center mx-auto shadow-inner mt-1">
+                          <Trash2 className="w-8 h-8 text-red-500" />
+                        </div>
+                      </div>
+                      <div className="text-center space-y-2">
+                        <h3 className="text-2xl font-display font-black tracking-tight text-red-600">再次確認移至暫存區？</h3>
+                        <p className="text-sm text-zinc-600 font-medium">
+                          請再次確認！即將把方案 <strong className="text-zinc-900">「{targetPlan?.name}」</strong> 移至刪除暫存區。
+                        </p>
+                      </div>
+                      <div className="bg-red-50/70 p-4 rounded-2xl border border-red-200/80 text-xs space-y-1.5 text-red-900 leading-relaxed">
+                        <p>• 移至暫存區後，此方案將從前台與訂單管理列表中隱藏。</p>
+                        <p>• 方案與所屬的 <strong>{planOrdersCount} 筆訂單</strong> 將在「刪除暫存區」保留 <strong>2 天 (48 小時)</strong>，期間可隨時一鍵復原。</p>
+                        <p>• 超過 2 天未復原，系統將自動永久清除。</p>
+                      </div>
+                      <div className="flex gap-3">
+                        <Button 
+                          variant="outline" 
+                          className="flex-1 py-3 cursor-pointer" 
+                          onClick={() => setConfirmDelete(null)}
+                        >
+                          {t('cancel')}
+                        </Button>
+                        <Button 
+                          variant="danger" 
+                          className="flex-1 py-3 cursor-pointer" 
+                          onClick={() => deleteItem('plans', confirmDelete.id)}
+                        >
+                          確定移至暫存區
+                        </Button>
+                      </div>
+                    </>
+                  )
+                ) : isPlanPermDelete ? (
+                  <>
+                    <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+                      <AlertCircle className="w-8 h-8 text-red-500" />
+                    </div>
+                    <div className="text-center space-y-2">
+                      <h3 className="text-2xl font-display font-black tracking-tight text-red-600">確認永久刪除方案？</h3>
+                      <p className="text-sm text-zinc-600 font-medium">
+                        此操作將立即從暫存區徹底刪除方案 <strong className="text-zinc-900">「{targetPlan?.name}」</strong> 及所屬的 <strong>{planOrdersCount} 筆訂單</strong>，刪除後將無法復原！
+                      </p>
+                    </div>
+                    <div className="flex gap-3">
+                      <Button 
+                        variant="outline" 
+                        className="flex-1 py-3 cursor-pointer" 
+                        onClick={() => setConfirmDelete(null)}
+                      >
+                        {t('cancel')}
+                      </Button>
+                      <Button 
+                        variant="danger" 
+                        className="flex-1 py-3 cursor-pointer" 
+                        onClick={() => deleteItem('plans_permanent', confirmDelete.id)}
+                      >
+                        確定永久刪除
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-16 h-16 bg-red-50 -red-900/20 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+                      <AlertCircle className="w-8 h-8 text-red-500" />
+                    </div>
+                    <div className="text-center space-y-2">
+                      <h3 className="text-2xl font-display font-black tracking-tight">{t('confirmDeleteTitle')}</h3>
+                      <p className="text-zinc-500 -zinc-400 font-medium">{t('confirmDeleteDesc')}</p>
+                    </div>
+                    <div className="flex gap-3">
+                      <Button 
+                        variant="outline" 
+                        className="flex-1 py-3" 
+                        onClick={() => setConfirmDelete(null)}
+                      >
+                        {t('cancel')}
+                      </Button>
+                      <Button 
+                        variant="danger" 
+                        className="flex-1 py-3" 
+                        onClick={() => deleteItem(confirmDelete.col, confirmDelete.id)}
+                      >
+                        {t('confirmDeleteBtn')}
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </motion.div>
+            </div>
+          );
+        })()}
       </AnimatePresence>
 
       {/* QR Code Modal */}

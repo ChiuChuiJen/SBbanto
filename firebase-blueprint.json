@@ -33,7 +33,10 @@
         "name": { "type": "string", "description": "Name of the plan" },
         "storeId": { "type": "string", "description": "ID of the store for this plan" },
         "diningDate": { "type": "string", "description": "Date of dining (YYYY-MM-DD)" },
-        "closingTime": { "type": "string", "description": "Closing time for orders (ISO 8601)" }
+        "closingTime": { "type": "string", "description": "Closing time for orders (ISO 8601)" },
+        "isClosed": { "type": "boolean", "description": "Whether the plan is closed" },
+        "isDeleted": { "type": "boolean", "description": "Whether the plan is soft-deleted in the 2-day trash" },
+        "deletedAt": { "type": "string", "description": "Timestamp when the plan was moved to trash (ISO 8601)" }
       },
       "required": ["id", "name", "storeId", "diningDate", "closingTime"]
     },

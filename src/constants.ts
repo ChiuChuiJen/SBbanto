@@ -1,7 +1,15 @@
-export const APP_VERSION = "V1.7.1";
-export const APP_UPDATE_DATE = "2026-09-08";
+export const APP_VERSION = "V1.7.2";
+export const APP_UPDATE_DATE = "2026-10-21";
 
 export const VERSION_HISTORY = [
+  { 
+    version: 'V1.7.2', 
+    date: '2026-10-21', 
+    notes: [
+      '後台刪除方案新增「二次確認」防呆機制，降低誤觸風險',
+      '新增「刪除暫存區 (保留 2 天)」功能：被刪除的方案將移至暫存區保留 2 天（期間內可隨時一鍵復原方案與訂單，期滿自動永久清除）'
+    ] 
+  },
   { 
     version: 'V1.7.1', 
     date: '2026-09-08', 
